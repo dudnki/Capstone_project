@@ -74,6 +74,8 @@ export default function RagEvaluationPage() {
       
       {/* ════════════════════════ HEADER ════════════════════════ */}
       <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-white" style={{ height: '54px', padding: '0 24px', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+        
+        {/* 1. 왼쪽: 로고 및 타이틀 */}
         <div className="flex items-center gap-2.5">
           <div className="flex items-center justify-center rounded-lg text-white text-[10px] font-bold" style={{ width: '28px', height: '28px', background: 'linear-gradient(135deg,#0f766e,#14b8a6)' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" /></svg>
@@ -84,38 +86,49 @@ export default function RagEvaluationPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 rounded-xl p-1" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
-          <button className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[12px] font-semibold transition-all" style={{ background: '#fff', color: '#0f766e', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+        {/* 2. 중앙: 네비게이션 탭 (절대 위치로 화면 정중앙 픽스) */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 rounded-xl p-1" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+          <button className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[12px] font-bold transition-all" style={{ background: '#fff', color: '#0f766e', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
             평가 결과
           </button>
-          <button className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[12px] font-medium text-slate-500 hover:bg-white hover:text-slate-700 transition-all">
+          <button className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[12px] font-bold text-slate-500 hover:bg-white hover:text-slate-700 transition-all">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
             데이터셋 관리
           </button>
         </div>
 
-        {/* 🚀 결과 창 여부에 따라 [새 문서 평가하기] / [Run Pipeline] 버튼이 바뀝니다 */}
-        {showResults ? (
-          <button 
-            onClick={handleReset}
-            className="flex items-center gap-2 rounded-xl font-semibold text-[13px] transition-all text-white cursor-pointer hover:-translate-y-[1px]"
-            style={{ padding: '9px 20px', background: 'linear-gradient(135deg,#0f766e,#0d9488)', boxShadow: '0 4px 14px rgba(13,148,136,0.35)', border: 'none' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><polyline points="21 3 21 8 16 8"/>
-            </svg>
-            새 문서 평가하기
-          </button>
-        ) : (
-          <button 
-            disabled={!uploadedFile || isAnalyzing}
-            onClick={handleRunPipeline}
-            className={`flex items-center gap-2 rounded-xl font-semibold text-[13px] transition-all ${uploadedFile && !isAnalyzing ? "text-white cursor-pointer hover:-translate-y-[1px]" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}
-            style={uploadedFile && !isAnalyzing ? { padding: '9px 20px', background: 'linear-gradient(135deg,#0f766e,#0d9488)', boxShadow: '0 4px 14px rgba(13,148,136,0.35)', border: 'none' } : { padding: '9px 20px', border: 'none' }}>
-            {uploadedFile && !isAnalyzing && <span className="w-1.5 h-1.5 rounded-full inline-block animate-pulse" style={{ background: '#5eead4' }}></span>}
-            {isAnalyzing ? '분석 중...' : 'Run Pipeline'}
-          </button>
-        )}
+        {/* 3. 우측: 액션 버튼 */}
+        <div className="flex items-center">
+          {showResults ? (
+            <button 
+              onClick={handleReset}
+              className="flex items-center gap-2 rounded-xl font-semibold text-[13px] transition-all text-white cursor-pointer hover:-translate-y-[1px]"
+              style={{ padding: '9px 20px', background: 'linear-gradient(135deg,#0f766e,#0d9488)', boxShadow: '0 4px 14px rgba(13,148,136,0.35)', border: 'none' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><polyline points="21 3 21 8 16 8"/>
+              </svg>
+              새 문서 평가하기
+            </button>
+          ) : (
+            <button 
+              disabled={!uploadedFile || isAnalyzing}
+              onClick={handleRunPipeline}
+              className={`flex items-center gap-2 rounded-xl font-semibold text-[13px] transition-all ${uploadedFile && !isAnalyzing ? "text-white cursor-pointer hover:-translate-y-[1px]" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}
+              style={uploadedFile && !isAnalyzing ? { padding: '9px 20px', background: 'linear-gradient(135deg,#0f766e,#0d9488)', boxShadow: '0 4px 14px rgba(13,148,136,0.35)', border: 'none' } : { padding: '9px 20px', border: 'none' }}>
+              
+              {/* ✨ 파일 유무와 상관없이 점(Dot)의 자리를 유지시킵니다. 파일이 없으면 회색 고정, 있으면 민트색 깜빡임 적용 */}
+              {!isAnalyzing && (
+                <span 
+                  className={`w-1.5 h-1.5 rounded-full inline-block ${uploadedFile ? 'animate-pulse' : ''}`} 
+                  style={{ background: uploadedFile ? '#5eead4' : '#94a3b8' }}
+                ></span>
+              )}
+              {isAnalyzing ? '분석 중...' : 'Run Pipeline'}
+              
+            </button>
+          )}
+        </div>
       </header>
 
       {/* ════════════════════════ SHELL ════════════════════════ */}
@@ -150,15 +163,6 @@ export default function RagEvaluationPage() {
           ) : (
             <div style={{ fontSize: '11px', color: '#cbd5e1', padding: '8px 10px' }}>최근 문서가 없습니다.</div>
           )}
-          
-          <div className="flex items-center gap-2.5 mt-auto hover:bg-slate-50 cursor-pointer transition-colors p-2 rounded-xl" style={{ borderTop: '1px solid #f1f5f9' }}>
-            <div className="flex items-center justify-center rounded-full text-slate-400 flex-shrink-0" style={{ width: '28px', height: '28px', background: '#f1f5f9' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </div>
-            <div className="min-w-0">
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>로그인 해주세요</div>
-            </div>
-          </div>
         </aside>
 
         {/* --- MAIN --- */}
