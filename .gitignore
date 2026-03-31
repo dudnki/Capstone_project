@@ -25,3 +25,6 @@ backend/vector_db/
 # 운영체제에서 자동 생성하는 임시 파일
 .DS_Store
 Thumbs.db
+
+backend/.env
+backend/.venv/
