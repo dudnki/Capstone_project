@@ -77,10 +77,39 @@ export default function RagEvaluationPage() {
     }
   };
 
-  const handleRunPipeline = () => {
+  // 💡 백엔드(FastAPI) API로 파일을 전송하는 로직으로 완벽 교체!
+  const handleRunPipeline = async () => {
     if (!uploadedFile) return;
     setIsAnalyzing(true);
-    setTimeout(() => { setIsAnalyzing(false); setShowResults(true); }, 2500);
+
+    try {
+      // 1. 가상의 택배 상자(FormData)를 만들고 업로드된 파일 담기
+      const formData = new FormData();
+      formData.append('file', uploadedFile); 
+
+      // 2. 백엔드(FastAPI) 서버로 파일 전송 (로컬 테스트용 주소)
+      const response = await fetch('http://localhost:8000/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('백엔드 서버 연동 실패');
+      }
+
+      // 3. 백엔드 처리가 끝나고 돌아온 결과 받기
+      const resultData = await response.json();
+      console.log('백엔드 분석 완료:', resultData);
+      
+      // 4. 로딩 상태를 끄고 결과 화면 보여주기
+      setIsAnalyzing(false);
+      setShowResults(true);
+
+    } catch (error) {
+      console.error('파이프라인 실행 에러:', error);
+      setErrorMessage("서버와 통신하는 중 오류가 발생했습니다. 백엔드가 켜져 있는지 확인하세요.");
+      setIsAnalyzing(false);
+    }
   };
 
   const handleReset = () => {
@@ -169,8 +198,6 @@ export default function RagEvaluationPage() {
             <div className="font-mono" style={{ fontSize: '8px', color: '#14b8a6', letterSpacing: '0.14em', textTransform: 'uppercase', marginTop: '1px' }}>RAG Intelligence</div>
           </div>
         </div>
-
-        {/* 💡 상단 중앙 메뉴 삭제됨 */}
 
         <div className="flex items-center">
           {showResults ? (
