@@ -1,16 +1,17 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+<<<<<<< feat/backend-api-v2
+from app.routers import upload  # 분리한 upload 라우터 불러오기
+=======
 from supabase import create_client, Client
 import os
 import uuid  # UUID 생성을 위해 추가된 패키지
 from dotenv import load_dotenv
+>>>>>>> gen_model
 
-# .env 파일 로드
-load_dotenv()
+app = FastAPI(title="RAG Evaluation API")
 
-app = FastAPI()
-
-# 프론트엔드(Next.js) 요청 허용용 CORS 설정
+# 프론트엔드 통신 허용 (CORS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  
@@ -19,6 +20,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+<<<<<<< feat/backend-api-v2
+# 라우터 조립 (prefix="/api"를 주면 자동으로 /api/upload가 됩니다)
+app.include_router(upload.router, prefix="/api", tags=["Upload API"])
+
+@app.get("/")
+def read_root():
+    return {"message": "RAG Evaluation Backend is running!"}
+=======
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
@@ -56,3 +65,4 @@ async def upload_file(file: UploadFile = File(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"업로드 실패: {str(e)}")
+>>>>>>> gen_model
