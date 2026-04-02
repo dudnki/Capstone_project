@@ -28,3 +28,9 @@ Thumbs.db
 
 backend/.env
 backend/.venv/
+
+# .gitignore 파일 내용
+.env
+venv/
+__pycache__/
+*.pyc
