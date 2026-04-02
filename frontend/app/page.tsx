@@ -88,7 +88,7 @@ export default function RagEvaluationPage() {
       formData.append('file', uploadedFile); 
 
       // 2. 백엔드(FastAPI) 서버로 파일 전송 (로컬 테스트용 주소)
-      const response = await fetch('http://localhost:8000/api/upload', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upload`, {
         method: 'POST',
         body: formData,
       });
