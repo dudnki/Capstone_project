@@ -1,4 +1,7 @@
+<<<<<<< feat/backend-api-v2
+=======
 ```markdown
+>>>>>>> gen_model
 # 🚀 RAG Evaluation Pipeline Project
 
 LLM 성능 평가를 위한 자동화된 데이터셋 구축 및 RAG 파이프라인 프로젝트입니다.
@@ -9,7 +12,14 @@ LLM 성능 평가를 위한 자동화된 데이터셋 구축 및 RAG 파이프�
 - **Environment**: uv (Fast Python package installer)
 
 ## 📁 Project Structure
+<<<<<<< feat/backend-api-v2
+- `backend/`: FastAPI 기반의 API 서버
+  - `app/main.py`: 애플리케이션 진입점 및 전역 설정 (CORS, 라우터 조립)
+  - `app/routers/`: API 엔드포인트 라우팅 (파일 업로드 등)
+  - `app/services/`: 핵심 비즈니스 로직 및 외부 연동 (Supabase 클라이언트 등)
+=======
 - `backend/`: FastAPI 기반의 API 서버 로직
+>>>>>>> gen_model
 - `database/`: Supabase 테이블 스키마 및 SQL 명세서
 - `frontend/`: Next.js 기반 사용자 인터페이스
 
@@ -24,6 +34,9 @@ uv venv
 .\.venv\Scripts\activate
 
 # Mac/Linux 환경
+<<<<<<< feat/backend-api-v2
+source .venv/bin/activate
+=======
 source .venv/bin/activate
 ```
 
@@ -56,3 +69,4 @@ uvicorn app.main:app --reload
   - 통신 성공 시 `original_filename`(원본 파일명)과 `saved_filename`(변환된 저장 파일명)을 함께 반환하여 프론트엔드 렌더링을 지원합니다.
 - **DB 스키마 설계**: 원천 문서, 텍스트 청크(Chunks), Ragas 평가 지표 저장을 위한 관계형 테이블(PostgreSQL + pgvector) 구축을 완료했습니다.
 ```
+>>>>>>> gen_model
