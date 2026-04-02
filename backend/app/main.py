@@ -2,6 +2,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 import os
+import uuid  # UUID 생성을 위해 추가된 패키지
 from dotenv import load_dotenv
 
 # .env 파일 로드
@@ -30,20 +31,28 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 async def upload_file(file: UploadFile = File(...)):
     try:
         file_contents = await file.read()
-        file_name = file.filename
+        original_filename = file.filename
+        
+        # 1. 원본 파일에서 확장자만 추출 (예: .pdf, .txt)
+        _, ext = os.path.splitext(original_filename)
+        
+        # 2. UUID(고유 난수)를 사용하여 안전한 새 파일명 생성
+        # 예: 550e8400-e29b-41d4-a716-446655440000.pdf
+        safe_filename = f"{uuid.uuid4()}{ext}"
 
-        # documents 버킷에 업로드
+        # 3. documents 버킷에 안전한 파일명으로 업로드
         res = supabase.storage.from_("documents").upload(
-            file_name, 
+            safe_filename, 
             file_contents, 
             {"upsert": "true"}
         )
 
+        # 4. 프론트엔드에 원본 이름과 변환된 저장 이름을 모두 반환
         return {
             "message": "파일이 Supabase에 성공적으로 업로드되었습니다.",
-            "file_name": file_name
+            "original_filename": original_filename,
+            "saved_filename": safe_filename
         }
 
     except Exception as e:
-        print(f"!!! 에러 상세 내용: {e} !!!")
         raise HTTPException(status_code=500, detail=f"업로드 실패: {str(e)}")
