@@ -45,4 +45,5 @@ async def upload_file(file: UploadFile = File(...)):
         }
 
     except Exception as e:
+        print(f"!!! 에러 상세 내용: {e} !!!")
         raise HTTPException(status_code=500, detail=f"업로드 실패: {str(e)}")
