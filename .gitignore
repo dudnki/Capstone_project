@@ -15,6 +15,7 @@ __pycache__/
 # [Data & Models]
 # 대용량 데이터 및 AI 모델 가중치 (Git 용량 초과 방지)
 backend/data/
+backend/crawler/
 backend/vector_db/
 *.pt
 *.pth
