@@ -9,14 +9,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 1. Groq 설정 (환경 변수 우선, 없으면 직접 입력된 키 사용)
-GROQ_API_KEY = os.getenv("GROQ_API_Key", "키입력")
+GROQ_API_KEY = os.getenv("키입력")
+sever_password=("비번입력")
 client = Groq(api_key="키입력")
+sever_password=("비번입력")
 
 # 2. DB 설정 (로컬 테스트용 기본값 세팅)
 db_config = {
-    "dbname": os.getenv("DB_NAME", "captson_project"),
+    "dbname": os.getenv("DB_NAME", "captsgit branchon_project"),
     "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", "키입력"), 
+    "password": os.getenv("DB_PASSWORD", "비번입력"), 
     "host": os.getenv("DB_HOST", "127.0.0.1"),
     "port": os.getenv("DB_PORT", "5432")
 }
