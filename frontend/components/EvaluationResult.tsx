@@ -1,4 +1,5 @@
 import React from 'react';
+import { EvaluationItem } from '../src/types';
 
 interface EvaluationResultProps {
   showResults: boolean;
@@ -17,8 +18,8 @@ interface EvaluationResultProps {
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   setUploadedFile: (file: File | null) => void;
   formatFileSize: (bytes: number) => string;
-  setSelectedItemForReview: (item: any) => void;
-  filteredResults: any[];
+  setSelectedItemForReview: (item: EvaluationItem | null) => void;
+  filteredResults: EvaluationItem[];
 }
 
 export default function EvaluationResult({
@@ -126,7 +127,7 @@ export default function EvaluationResult({
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-b-2xl">
+          <div className="overflow-hidden rounded-b-2xl" style={{ minHeight: '280px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <colgroup><col style={{ width: '22%' }} /><col style={{ width: '16%' }} /><col style={{ width: '32%' }} /><col style={{ width: '14%' }} /><col style={{ width: '16%' }} /></colgroup>
               <thead>
