@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import upload
+from app.routers import upload, pipeline
 
 app = FastAPI(title="RAG Evaluation API")
 
@@ -13,6 +13,7 @@ app.add_middleware(
 )
 
 app.include_router(upload.router, prefix="/api", tags=["Upload API"])
+app.include_router(pipeline.router, prefix="/api", tags=["Pipeline API"])
 
 @app.get("/")
 def read_root():
