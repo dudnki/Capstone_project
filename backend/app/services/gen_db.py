@@ -18,7 +18,7 @@ sever_password=("비번입력")
 db_config = {
     "dbname": os.getenv("DB_NAME", "captsgit branchon_project"),
     "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", "비번입력"), 
+    "password": os.getenv("DB_PASSWORD", "비번입력"),
     "host": os.getenv("DB_HOST", "127.0.0.1"),
     "port": os.getenv("DB_PORT", "5432")
 }
