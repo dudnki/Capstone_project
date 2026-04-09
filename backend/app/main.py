@@ -7,7 +7,7 @@ app = FastAPI(title="RAG Evaluation API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-from app.routers import upload  # 분리한 upload 라우터 불러오기
+from app.routers import upload)  # 분리한 upload 라우터 불러오기
 
 app = FastAPI(title="RAG Evaluation API")
 
