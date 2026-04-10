@@ -1,7 +1,7 @@
 import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.services.supabase import supabase_client
+from app.services.supabase import supabase_client  # (경로가 맞는지 한번 확인해주세요!)
 
 router = APIRouter()
 
@@ -24,12 +24,6 @@ class PipelineRequest(BaseModel):
 async def run_pipeline(req: PipelineRequest):
     """
     파이프라인 실행 엔드포인트.
-
-    1. Supabase Storage에서 파일 다운로드
-    2. 텍스트 추출
-    3. LLM으로 Q&A 생성
-    4. RAGAS로 평가
-    5. 결과 반환 (EvaluationItem 형식)
     """
     try:
         # 1. Supabase Storage에서 파일 다운로드
@@ -42,8 +36,24 @@ async def run_pipeline(req: PipelineRequest):
         ext = req.original_filename.rsplit(".", 1)[-1].lower()
         style = DTYPE_STYLES.get(ext, {"color": "#475569", "bg": "#f8fafc"})
 
-        # TODO: 텍스트 추출 → LLM Q&A 생성 → RAGAS 평가 구현
-        # 현재는 파이프라인 연결 확인용 stub 반환
+        # 🔥 [핵심 추가] 3. DB 장부(documents 테이블)에 문서 기록 남기기!
+        # (임시 처리: 현재 텍스트 추출기능이 없으므로, 파일 내용을 디코딩 시도하고 안되면 더미텍스트 삽입)
+        try:
+            content_text = file_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            content_text = "[바이너리 파일 - 텍스트 추출 모듈 연동 전]"
+
+        doc_insert_res = supabase_client.table("documents").insert({
+            "content": content_text,
+            "original_filename": req.original_filename, # 🌟 아까 만든 칸에 파일명 쏙 넣기!
+            "status": "처리중"
+        }).execute()
+        
+        # 방금 저장된 문서의 고유 ID (나중에 qa_evaluations 테이블에 점수 넣을 때 필요함)
+        document_id = doc_insert_res.data[0]["id"]
+
+
+        # TODO: 본격적인 LLM Q&A 생성 → RAGAS 평가 구현 (현재는 stub)
         results = _build_response(
             qa_pairs=[],
             ragas_scores=[],
@@ -51,6 +61,9 @@ async def run_pipeline(req: PipelineRequest):
             ext=ext,
             style=style,
         )
+
+        # (선택) 파이프라인이 다 끝났다면 상태를 '완료'로 업데이트
+        supabase_client.table("documents").update({"status": "완료"}).eq("id", document_id).execute()
 
         return results
 
@@ -69,12 +82,6 @@ def _build_response(
 ) -> list[dict]:
     """
     RAGAS 결과를 프론트엔드 EvaluationItem 형식으로 변환합니다.
-
-    qa_pairs 형식:
-        [{"question": "...", "answer": "...", "ground_truth": "...", "context": "..."}]
-
-    ragas_scores 형식:
-        [{"faithfulness": 0.9, "answer_relevancy": 0.8, "context_precision": 0.85}]
     """
     results = []
 
@@ -83,7 +90,6 @@ def _build_response(
         answer_relevancy  = scores.get("answer_relevancy", 0)
         context_precision = scores.get("context_precision", 0)
 
-        # 3개 지표 평균을 대표 점수로 사용
         avg_score = round((faithfulness + answer_relevancy + context_precision) / 3, 2)
 
         results.append({
