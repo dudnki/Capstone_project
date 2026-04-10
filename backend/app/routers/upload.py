@@ -1,7 +1,7 @@
 import os
 import uuid
 from fastapi import APIRouter, File, UploadFile, HTTPException
-from backend.app.services.supabase_client import supabase_client  # 방금 분리한 DB 클라이언트 호출
+from app.services.supabase_client import supabase_client
 
 router = APIRouter()
 

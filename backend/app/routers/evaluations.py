@@ -55,3 +55,25 @@ async def get_evaluation_detail(document_id: str):
     except Exception as e:
         # DB에 해당 id가 없거나 통신 에러 시 404/500 반환
         raise HTTPException(status_code=404, detail=f"상세 데이터를 찾을 수 없습니다: {str(e)}")
+
+
+@router.get("/evaluations/{document_id}/questions")
+async def get_questions(document_id: str):
+    """
+    특정 문서에서 LLM이 생성한 질문 목록만 반환합니다.
+    """
+    try:
+        response = supabase_client.table("qa_evaluations")\
+            .select("question")\
+            .eq("document_id", document_id)\
+            .execute()
+
+        questions = [row["question"] for row in response.data]
+
+        return {
+            "success": True,
+            "questions": questions
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"질문 조회 실패: {str(e)}")
