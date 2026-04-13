@@ -24,11 +24,11 @@
 /* 드래그 앤 드롭 영역 */
 .dropzone { transition: all 0.2s; }
 .dropzone:hover {
-  border-color: #14b8a6 !important;
-  background: #f0fdfa !important;
+  border-color: #3b82f6 !important;
+  background: #eff6ff !important;
 }
-.dropzone:hover .drop-icon-wrap { background: #ccfbf1 !important; }
-.dropzone:hover .drop-icon-wrap svg { stroke: #0d9488 !important; }
+.dropzone:hover .drop-icon-wrap { background: #dbeafe !important; }
+.dropzone:hover .drop-icon-wrap svg { stroke: #2563eb !important; }
 
 /* 스텝 가이드 카드 */
 .step-card { transition: transform 0.18s, box-shadow 0.18s; }
@@ -37,9 +37,9 @@
 /* 업로드 버튼 */
 .btn-upload { transition: all 0.15s; }
 .btn-upload:hover {
-  background: linear-gradient(135deg,#0d9488,#14b8a6) !important;
+  background: linear-gradient(135deg,#1d4ed8,#2563eb) !important;
   transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(13,148,136,0.38) !important;
+  box-shadow: 0 8px 24px rgba(37,99,235,0.35) !important;
 }
 
 /* 폰트 연결 */
