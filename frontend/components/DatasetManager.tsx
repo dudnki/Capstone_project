@@ -1,15 +1,5 @@
 ﻿import React, { useMemo, useState } from 'react';
-
-type QuestionItem = {
-  id: number;
-  text: string;
-};
-
-type GeneratedSummary = {
-  questionCount: number;
-  format: 'csv' | 'json';
-  createdAt: string;
-};
+import type { QuestionItem, GeneratedSummary } from '../src/types';
 
 interface DatasetManagerProps {
   isGenerating: boolean;
@@ -37,7 +27,6 @@ const DOCUMENT_EXTENSIONS = ['PDF', 'CSV', 'TXT', 'JSON', 'JSONL', 'MD'];
 const STEPS = ['문서 업로드', '질문 생성', '질문 검토', '질문 다운로드'];
 
 export default function DatasetManager({
-  isGenerating,
   uploadedFile,
   generatedSummary,
   generatedQuestions,
@@ -51,7 +40,6 @@ export default function DatasetManager({
   handleFileChange,
   formatFileSize,
   onRemoveFile,
-  onGenerateQuestions,
   onDownloadQuestions,
   onMoveToEvaluation,
   onUpdateQuestion,
@@ -158,7 +146,7 @@ export default function DatasetManager({
             />
 
             <div
-              className={`mt-4 flex min-h-[220px] flex-1 flex-col items-center justify-center rounded-2xl border border-dashed px-8 transition-colors ${
+              className={`mt-4 flex min-h-[190px] flex-1 flex-col items-center justify-center rounded-2xl border border-dashed px-8 transition-colors ${
                 isDragging ? 'border-blue-300 bg-blue-50/70' : 'border-slate-300 bg-white'
               }`}
               onDragOver={handleDragOver}
@@ -173,18 +161,18 @@ export default function DatasetManager({
                     <p className="mt-2 text-sm text-slate-500">{formatFileSize(uploadedFile.size)}</p>
                   </div>
 
-                  <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[240px]">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[272px]">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      className="rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
                     >
                       문서 변경
                     </button>
                     <button
                       type="button"
                       onClick={onRemoveFile}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-500 hover:bg-slate-50"
+                      className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
                     >
                       제거
                     </button>
@@ -225,7 +213,7 @@ export default function DatasetManager({
           <div className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">
-                {uploadedFile ? '질문 생성 준비가 완료되었습니다' : '문서를 올리면 질문 생성 버튼이 활성화됩니다'}
+                {uploadedFile ? '질문 생성 준비가 완료되었습니다' : '문서를 올리면 상단에서 질문을 생성할 수 있습니다'}
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-500">
                 생성된 질문은 아래에서 바로 수정하거나 삭제할 수 있습니다.
@@ -233,24 +221,11 @@ export default function DatasetManager({
             </div>
 
             <div className="flex shrink-0 flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={onGenerateQuestions}
-                disabled={!uploadedFile || isGenerating}
-                className={`rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
-                  !uploadedFile || isGenerating
-                    ? 'cursor-not-allowed bg-slate-200 text-slate-400'
-                    : 'bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.16)] hover:bg-blue-700'
-                }`}
-              >
-                {isGenerating ? '질문 생성 중...' : '질문 생성하기'}
-              </button>
-
               {generatedSummary && (
                 <button
                   type="button"
                   onClick={onDownloadQuestions}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
                 >
                   질문 다운로드
                 </button>
@@ -260,7 +235,7 @@ export default function DatasetManager({
                 <button
                   type="button"
                   onClick={onMoveToEvaluation}
-                  className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                  className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
                 >
                   성능 평가로 이동
                 </button>
@@ -289,7 +264,7 @@ export default function DatasetManager({
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">Submission format</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">제출 형식</p>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">결과 제출 파일 예시</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               성능 평가 단계에서는 아래 필드를 포함한 결과 파일이 필요합니다.
@@ -297,7 +272,7 @@ export default function DatasetManager({
             <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-5 text-slate-700">{`{
   "question": "...",
   "answer": "...",
-  "retrieved_context": "..."
+  "retrieved_context": ["...", "..."]
 }`}</pre>
           </div>
         </section>
@@ -307,7 +282,7 @@ export default function DatasetManager({
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
           <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">Review</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">질문 검토</p>
               <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">질문 검토 및 수정</h3>
             </div>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -320,7 +295,7 @@ export default function DatasetManager({
               const isEditing = editingQuestionId === question.id;
 
               return (
-                <div key={question.id} className="px-6 py-5">
+                <div key={question.id} className="px-6 py-4">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                     <div className="flex min-w-0 flex-1 gap-3">
                       <span className="mt-0.5 inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-50 px-2 text-xs font-bold text-blue-700">
@@ -332,7 +307,7 @@ export default function DatasetManager({
                             value={question.text}
                             onChange={(e) => onUpdateQuestion(question.id, e.target.value)}
                             rows={3}
-                            className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2.5 text-sm leading-6 text-slate-700 outline-none focus:border-blue-400"
+                            className="w-full rounded-xl border border-blue-200 bg-blue-50/40 px-3 py-2.5 text-sm leading-6 text-slate-700 outline-none focus:border-blue-400"
                           />
                         ) : (
                           <p className="text-sm leading-7 text-slate-700">{question.text}</p>
@@ -344,14 +319,14 @@ export default function DatasetManager({
                       <button
                         type="button"
                         onClick={() => setEditingQuestionId(isEditing ? null : question.id)}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-blue-700"
+                        className="rounded-xl border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
                       >
                         {isEditing ? '완료' : '수정'}
                       </button>
                       <button
                         type="button"
                         onClick={() => onRemoveQuestion(question.id)}
-                        className="rounded-xl border border-rose-100 px-3 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-50"
+                        className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
                       >
                         삭제
                       </button>

@@ -9,7 +9,7 @@ const MENUS = ['테스트셋 생성', '성능 평가'] as const;
 
 export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
   return (
-    <aside className="z-[40] hidden w-[156px] flex-shrink-0 border-r border-slate-200 bg-white px-2 py-4 xl:flex xl:flex-col">
+    <aside className="z-[40] hidden w-[168px] flex-shrink-0 border-r border-slate-200 bg-white px-2 py-4 xl:flex xl:flex-col">
       <div className="px-2 pb-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Workflow</p>
       </div>
@@ -35,12 +35,30 @@ export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
                 }`}
               >
                 {menu === '테스트셋 생성' ? (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M12 5v14" />
                     <path d="M5 12h14" />
                   </svg>
                 ) : (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <line x1="18" y1="20" x2="18" y2="10" />
                     <line x1="12" y1="20" x2="12" y2="4" />
                     <line x1="6" y1="20" x2="6" y2="14" />
@@ -62,7 +80,9 @@ export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
       <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <p className="text-[11px] font-semibold text-slate-700">현재 구조</p>
         <p className="mt-2 text-[11px] leading-5 text-slate-500">
-          검수는 테스트셋 생성 흐름 안에 포함되고, 결과 제출 파일은 `retrieved_context`를 포함합니다.
+          질문 검토는 테스트셋 생성 흐름 안에 포함되고, 결과 제출 파일에는
+          <span className="font-semibold text-slate-600"> retrieved_context </span>
+          가 포함됩니다.
         </p>
       </div>
     </aside>

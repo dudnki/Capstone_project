@@ -33,7 +33,16 @@ export default function Header({
     <header className="relative z-[60] flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4 shadow-[0_1px_4px_rgba(15,23,42,0.04)] lg:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.16)]">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
           </svg>
         </div>
@@ -45,18 +54,22 @@ export default function Header({
               {activeMenu}
             </span>
           </div>
+
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <span className="truncate">{description ?? activeMenu}</span>
+
             {currentStepLabel && (
               <span className="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700">
                 {currentStepLabel}
               </span>
             )}
+
             {primaryStatus && (
               <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-medium text-slate-600">
                 {primaryStatus}
               </span>
             )}
+
             {secondaryStatus && (
               <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-medium text-slate-600">
                 {secondaryStatus}

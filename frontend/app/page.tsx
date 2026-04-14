@@ -5,33 +5,14 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import DatasetManager from '../components/DatasetManager';
 import EvaluationResult from '../components/EvaluationResult';
-
-type MenuType = '테스트셋 생성' | '성능 평가';
-
-export type QuestionItem = {
-  id: number;
-  text: string;
-};
-
-export type GeneratedSummary = {
-  questionCount: number;
-  format: 'csv' | 'json';
-  createdAt: string;
-};
-
-export type EvaluationSummary = {
-  retrievalScore: number;
-  answerScore: number;
-  groundedScore: number;
-};
-
-export type EvaluationRow = {
-  id: number;
-  question: string;
-  answer: string;
-  retrievedContext: string;
-  score: number;
-};
+import type {
+  MenuType,
+  QuestionItem,
+  GeneratedSummary,
+  EvaluationSummary,
+  EvaluationRow,
+  EvaluationRowStatus,
+} from '../src/types';
 
 const DOCUMENT_EXTENSIONS = ['.pdf', '.csv', '.txt', '.json', '.jsonl', '.md'];
 const RESULT_EXTENSIONS = ['.csv', '.json', '.jsonl'];
@@ -56,6 +37,7 @@ export default function RagEvaluationPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultFileInputRef = useRef<HTMLInputElement>(null);
+  const mainScrollRef = useRef<HTMLElement | null>(null);
 
   const canGenerateQuestions = Boolean(uploadedFile);
   const canRunEvaluation = Boolean(resultFile);
@@ -99,7 +81,11 @@ export default function RagEvaluationPage() {
       return generatedSummary ? `질문 ${generatedSummary.questionCount}개` : '질문 생성 전';
     }
 
-    return evaluationSummary ? '평가 완료' : generatedSummary ? '질문 세트 준비됨' : '질문 세트 필요';
+    return evaluationSummary
+      ? `질문 ${evaluationSummary.evaluatedCount}개 평가`
+      : generatedSummary
+        ? '질문 세트 준비됨'
+        : '질문 세트 필요';
   }, [activeMenu, generatedSummary, evaluationSummary]);
 
   const formatFileSize = (bytes: number) => {
@@ -218,10 +204,10 @@ export default function RagEvaluationPage() {
 
       const questions: QuestionItem[] = [
         { id: 1, text: '문서의 핵심 목적 또는 주제를 한 문장으로 설명해 주세요.' },
-        { id: 2, text: '문서에서 가장 중요한 원칙 또는 단계는 무엇인가요?' },
-        { id: 3, text: '문서에서 설명하는 주요 개념 두 가지를 비교해 설명해 주세요.' },
-        { id: 4, text: '문서 내용을 바탕으로 사용자가 자주 묻는 질문은 무엇일까요?' },
-        { id: 5, text: '문서에서 근거를 찾아 답해야 하는 검증형 질문 하나를 만들어 주세요.' },
+        { id: 2, text: '문서에서 가장 중요한 원칙 또는 단계를 설명해 주세요.' },
+        { id: 3, text: '문서 내용을 바탕으로 비교형 질문 하나를 만들어 주세요.' },
+        { id: 4, text: '문서에서 근거를 찾아 답해야 하는 검증형 질문을 만들어 주세요.' },
+        { id: 5, text: '실제 사용자 관점에서 자주 물을 만한 질문을 하나 만들어 주세요.' },
       ];
 
       setGeneratedQuestions(questions);
@@ -236,6 +222,12 @@ export default function RagEvaluationPage() {
     }
   };
 
+  const getRowStatus = (score: number): EvaluationRowStatus => {
+    if (score >= 0.85) return 'good';
+    if (score >= 0.7) return 'review';
+    return 'poor';
+  };
+
   const handleRunEvaluation = async () => {
     if (!resultFile) return;
 
@@ -243,35 +235,62 @@ export default function RagEvaluationPage() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 1200));
 
-      setEvaluationSummary({
-        retrievalScore: 0.82,
-        answerScore: 0.88,
-        groundedScore: 0.79,
-      });
-
-      setEvaluationRows([
+      const rows: EvaluationRow[] = [
         {
           id: 1,
           question: '문서의 핵심 목적 또는 주제를 한 문장으로 설명해 주세요.',
-          answer: '문서는 RAG 평가를 위해 질문 생성과 결과 제출 기반 평가 흐름을 설명합니다.',
-          retrievedContext: '기준 문서 업로드 후 질문 세트 생성 및 결과 파일 업로드를 통해 최종 평가를 수행합니다.',
-          score: 0.91,
+          answer:
+            '이 문서는 기준 문서를 바탕으로 질문을 생성하고, 사용자 결과 제출을 통해 RAG를 평가하는 흐름을 설명합니다.',
+          retrievedContext: [
+            '기준 문서를 업로드하면 질문 세트를 생성하고, 사용자는 결과 파일을 다시 업로드해 평가를 진행합니다.',
+            'retrieved_context를 포함한 결과를 받아 검색 성능과 생성 성능을 함께 평가합니다.',
+          ],
+          retrievalScore: 0.89,
+          generationScore: 0.92,
+          groundedScore: 0.87,
+          overallScore: 0.89,
+          status: getRowStatus(0.89),
         },
         {
           id: 2,
-          question: '문서에서 가장 중요한 단계는 무엇인가요?',
-          answer: '질문 생성 이후 사용자 테스트 결과 파일을 다시 업로드하는 단계가 중요합니다.',
-          retrievedContext: '사용자는 생성된 질문 파일을 내려받아 자신의 RAG 시스템에 적용한 뒤 결과를 제출합니다.',
-          score: 0.84,
+          question: '문서에서 가장 중요한 원칙 또는 단계를 설명해 주세요.',
+          answer: '질문 생성 후 사용자 RAG에서 실제로 실행한 결과를 다시 제출받는 단계가 핵심입니다.',
+          retrievedContext: [
+            '사용자는 생성된 질문 파일을 내려받아 자신의 RAG 시스템에 적용한 뒤 결과를 제출합니다.',
+          ],
+          retrievalScore: 0.82,
+          generationScore: 0.85,
+          groundedScore: 0.79,
+          overallScore: 0.82,
+          status: getRowStatus(0.82),
         },
         {
           id: 3,
           question: 'retrieved_context가 왜 필요한가요?',
-          answer: '검색된 근거 문맥이 있어야 검색 성능과 생성 성능을 함께 판단할 수 있습니다.',
-          retrievedContext: 'retrieved_context는 검색 단계에서 가져온 문서 조각 또는 근거 문맥을 의미합니다.',
-          score: 0.73,
+          answer: '검색된 문맥이 있어야 답변뿐 아니라 검색 단계까지 함께 평가할 수 있습니다.',
+          retrievedContext: [
+            'retrieved_context는 검색 단계에서 실제로 가져온 문서 조각 또는 근거 문맥을 의미합니다.',
+            '답변만 평가하면 QA 평가에 가깝고, 문맥까지 있어야 진짜 RAG 평가가 가능합니다.',
+          ],
+          retrievalScore: 0.71,
+          generationScore: 0.78,
+          groundedScore: 0.68,
+          overallScore: 0.72,
+          status: getRowStatus(0.72),
         },
-      ]);
+      ];
+
+      const average = (values: number[]) =>
+        values.reduce((sum, value) => sum + value, 0) / values.length;
+
+      setEvaluationRows(rows);
+      setEvaluationSummary({
+        overallScore: average(rows.map((row) => row.overallScore)),
+        retrievalScore: average(rows.map((row) => row.retrievalScore)),
+        generationScore: average(rows.map((row) => row.generationScore)),
+        groundedScore: average(rows.map((row) => row.groundedScore)),
+        evaluatedCount: rows.length,
+      });
     } finally {
       setIsEvaluating(false);
     }
@@ -327,6 +346,20 @@ export default function RagEvaluationPage() {
     await handleRunEvaluation();
   };
 
+  const getMainScrollTop = () => mainScrollRef.current?.scrollTop ?? 0;
+
+  const restoreMainScrollTop = (top: number) => {
+    const el = mainScrollRef.current;
+    if (!el) return;
+
+    requestAnimationFrame(() => {
+      el.scrollTop = top;
+      requestAnimationFrame(() => {
+        el.scrollTop = top;
+      });
+    });
+  };
+
   return (
     <div className="relative flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <Header
@@ -344,8 +377,11 @@ export default function RagEvaluationPage() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar activeMenu={activeMenu} setActiveMenu={(menu) => setActiveMenu(menu as MenuType)} />
 
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          {/* h-full 체인: main → wrapper → inner → DatasetManager 까지 높이 전달 */}
+        <main
+          ref={mainScrollRef}
+          className="min-w-0 flex-1 overflow-y-scroll"
+          style={{ scrollbarGutter: 'stable' }}
+        >
           <div className="flex h-full w-full flex-col px-4 py-4 lg:px-6 lg:py-6 2xl:px-8">
             <div className="flex min-h-0 flex-1 flex-col">
               {activeMenu === '테스트셋 생성' ? (
@@ -386,6 +422,8 @@ export default function RagEvaluationPage() {
                   onRemoveResultFile={handleRemoveResultFile}
                   onRunEvaluation={handleRunEvaluation}
                   formatFileSize={formatFileSize}
+                  getScrollTop={getMainScrollTop}
+                  restoreScrollTop={restoreMainScrollTop}
                 />
               )}
             </div>
