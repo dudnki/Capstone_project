@@ -5,6 +5,10 @@ from app.services.supabase_client import supabase_client
 
 router = APIRouter()
 
+<<<<<<< HEAD
+=======
+# 이미 main.py에서 /api 접두사를 붙일 것이므로 여기서는 /upload만 적습니다.
+>>>>>>> 1557ed46641e8fbc6be274249f5d768f612c932a
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
@@ -12,6 +16,7 @@ async def upload_file(file: UploadFile = File(...)):
         original_filename = file.filename
         
         _, ext = os.path.splitext(original_filename)
+<<<<<<< HEAD
         # UUID 기반의 안전한 파일명 생성
         safe_filename = f"{uuid.uuid4()}{ext}"
 
@@ -35,6 +40,17 @@ async def upload_file(file: UploadFile = File(...)):
         }).execute()
         """
 
+=======
+        safe_filename = f"{uuid.uuid4()}{ext}"
+
+        # documents 버킷에 업로드 (supabase_client 사용)
+        res = supabase_client.storage.from_("documents").upload(
+            safe_filename, 
+            file_contents, 
+            {"upsert": "true"}
+        )
+
+>>>>>>> 1557ed46641e8fbc6be274249f5d768f612c932a
         return {
             "message": "파일이 Supabase에 성공적으로 업로드되었습니다.",
             "original_filename": original_filename,
@@ -42,6 +58,9 @@ async def upload_file(file: UploadFile = File(...)):
         }
 
     except Exception as e:
+<<<<<<< HEAD
         # 에러 발생 시 상세 정보 출력 (디버깅용)
         print(f"Upload Error: {str(e)}")
+=======
+>>>>>>> 1557ed46641e8fbc6be274249f5d768f612c932a
         raise HTTPException(status_code=500, detail=f"업로드 실패: {str(e)}")

@@ -1,1 +1,1 @@
-# Capstone_project
+pip install datasets ragas langchain-groq pandas

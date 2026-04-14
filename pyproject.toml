@@ -1,0 +1,17 @@
+[project]
+name = "capstone-project"
+version = "0.1.0"
+description = "RAG Evaluation Dataset Generator"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "groq>=0.5.0",
+    "supabase>=2.4.0",
+    "python-dotenv>=1.0.1",
+    "postgrest>=0.10.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0.0",
+]
