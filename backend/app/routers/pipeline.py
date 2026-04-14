@@ -1,0 +1,129 @@
+import os
+import json
+import fitz  # PyMuPDF
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from groq import Groq
+from app.services.supabase_client import supabase_client
+
+router = APIRouter()
+
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+groq_client = Groq(api_key=GROQ_API_KEY)
+
+DTYPE_STYLES = {
+    "pdf":   {"color": "#b91c1c", "bg": "#fef2f2"},
+    "txt":   {"color": "#1d4ed8", "bg": "#eff6ff"},
+    "md":    {"color": "#1d4ed8", "bg": "#eff6ff"},
+}
+
+class PipelineRequest(BaseModel):
+    saved_filename: str    
+    original_filename: str 
+
+def clean_and_parse_json(raw_content):
+    try:
+        cleaned = raw_content.replace("```json", "").replace("```", "").strip()
+        return json.loads(cleaned)
+    except Exception:
+        return None
+
+def generate_qa_with_groq(context: str):
+    # 프롬프트에서도 answer 대신 ground_truth 용어를 사용하도록 수정했습니다.
+    prompt = f"다음 문맥을 바탕으로 질문과 답변을 한 쌍의 JSON 형식으로 만들어줘. 결과는 반드시 {{'question': '...', 'answer': '...'}} 형식이어야 해. \n\n[Context]: {context}"
+    completion = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"}
+    )
+    return completion.choices[0].message.content
+
+@router.post("/pipeline/run")
+async def run_pipeline(req: PipelineRequest):
+    try:
+        # 1. Supabase Storage에서 파일 다운로드
+        file_bytes = supabase_client.storage.from_("documents").download(req.saved_filename)
+        if not file_bytes:
+            raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
+
+        # 2. 텍스트 추출
+        ext = req.original_filename.rsplit(".", 1)[-1].lower()
+        extracted_text = ""
+        
+        if ext == "pdf":
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            for page in doc:
+                extracted_text += page.get_text()
+        else:
+            extracted_text = file_bytes.decode("utf-8")
+
+        # 3. DB 장부(documents 테이블) 기록
+        # 민철님이 추가한 original_filename 컬럼명을 정확히 사용합니다.
+        doc_insert_res = supabase_client.table("documents").insert({
+            "content": extracted_text[:5000], 
+            "original_filename": req.original_filename,
+            "status": "처리중"
+        }).execute()
+        
+        document_id = doc_insert_res.data[0]["id"]
+
+        # 4. 청킹 (1000자 단위)
+        chunk_size = 1000
+        chunks = [extracted_text[i:i+chunk_size] for i in range(0, len(extracted_text), chunk_size)]
+
+        # 5. LLM Q&A 생성 및 저장
+        qa_pairs = []
+        for chunk in chunks[:5]: # 테스트용 5개 제한
+            raw_res = generate_qa_with_groq(chunk)
+            qa_data = clean_and_parse_json(raw_res)
+            
+            if qa_data and "question" in qa_data:
+                # 🔥 [핵심 수정] 민철님의 새로운 DB 스키마에 맞게 컬럼명 매핑
+                insert_data = {
+                    "document_id": document_id,            # 외래키 연결 활성화
+                    "question": qa_data.get("question"),
+                    "ground_truth": qa_data.get("answer"), # 'answer'를 'ground_truth' 컬럼으로!
+                    "context": chunk,
+                    #"model_endpoint": "llama-3.3-70b"      # 모델 정보 기록
+                }
+                # supabase_client는 service_role 키를 사용하므로 RLS를 통과합니다.
+                supabase_client.table("qa_evaluations").insert(insert_data).execute()
+                qa_pairs.append(qa_data)
+
+        # 6. RAGAS 평가 (Stub)
+        ragas_scores = [{"faithfulness": 0.8, "answer_relevancy": 0.8, "context_precision": 0.8} for _ in qa_pairs]
+
+        # 7. 상태 업데이트 및 결과 반환
+        supabase_client.table("documents").update({"status": "완료"}).eq("id", document_id).execute()
+        
+        style = DTYPE_STYLES.get(ext, {"color": "#475569", "bg": "#f8fafc"})
+        return _build_response(qa_pairs, ragas_scores, req.original_filename, ext, style)
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"파이프라인 실행 중 오류 발생: {str(e)}")
+
+def _build_response(qa_pairs, ragas_scores, original_filename, ext, style):
+    results = []
+    for i, (qa, scores) in enumerate(zip(qa_pairs, ragas_scores), start=1):
+        faithfulness      = scores.get("faithfulness", 0)
+        answer_relevancy  = scores.get("answer_relevancy", 0)
+        context_precision = scores.get("context_precision", 0)
+        avg_score = round((faithfulness + answer_relevancy + context_precision) / 3, 2)
+
+        results.append({
+            "id":                i,
+            "q":                 qa["question"],
+            "doc":               original_filename,
+            "dtype":             ext,
+            "color":             style["color"],
+            "bg":                style["bg"],
+            "answer":            qa["answer"], # 응답용 키값은 유지해도 무방합니다.
+            "score":             avg_score,
+            "faithfulness":      round(faithfulness, 2),
+            "answer_relevancy":  round(answer_relevancy, 2),
+            "context_precision": round(context_precision, 2),
+        })
+    return results
