@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useMemo, useRef, useState } from 'react';
 import Header from '../components/Header';
@@ -82,6 +82,7 @@ export default function RagEvaluationPage() {
       const labels = ['1단계 문서 업로드', '2단계 질문 생성', '3단계 질문 검토', '4단계 질문 다운로드'];
       return labels[Math.min(currentStepValue, 4) - 1];
     }
+
     return evaluationSummary ? '평가 결과 확인' : '결과 파일 업로드';
   }, [activeMenu, currentStepValue, evaluationSummary]);
 
@@ -89,6 +90,7 @@ export default function RagEvaluationPage() {
     if (activeMenu === '테스트셋 생성') {
       return uploadedFile ? `문서 ${uploadedFile.name}` : '문서 미업로드';
     }
+
     return resultFile ? `결과 ${resultFile.name}` : '결과 파일 미업로드';
   }, [activeMenu, uploadedFile, resultFile]);
 
@@ -96,6 +98,7 @@ export default function RagEvaluationPage() {
     if (activeMenu === '테스트셋 생성') {
       return generatedSummary ? `질문 ${generatedSummary.questionCount}개` : '질문 생성 전';
     }
+
     return evaluationSummary ? '평가 완료' : generatedSummary ? '질문 세트 준비됨' : '질문 세트 필요';
   }, [activeMenu, generatedSummary, evaluationSummary]);
 
@@ -106,10 +109,10 @@ export default function RagEvaluationPage() {
   };
 
   const validateFile = (file: File, allowedExtensions: string[]) => {
-    const MAX_SIZE = 1024 * 1024 * 1024;
+    const maxSize = 1024 * 1024 * 1024;
     const fileExt = `.${file.name.split('.').pop()?.toLowerCase()}`;
 
-    if (file.size > MAX_SIZE) return false;
+    if (file.size > maxSize) return false;
     return allowedExtensions.includes(fileExt);
   };
 
@@ -215,9 +218,9 @@ export default function RagEvaluationPage() {
 
       const questions: QuestionItem[] = [
         { id: 1, text: '문서의 핵심 목적 또는 주제를 한 문장으로 설명해 주세요.' },
-        { id: 2, text: '문서에서 가장 중요한 절차 또는 단계는 무엇인가요?' },
-        { id: 3, text: '문서에 등장하는 주요 개념 2가지를 비교해 설명해 주세요.' },
-        { id: 4, text: '문서 내용을 바탕으로 사용자가 가장 자주 묻는 질문은 무엇일까요?' },
+        { id: 2, text: '문서에서 가장 중요한 원칙 또는 단계는 무엇인가요?' },
+        { id: 3, text: '문서에서 설명하는 주요 개념 두 가지를 비교해 설명해 주세요.' },
+        { id: 4, text: '문서 내용을 바탕으로 사용자가 자주 묻는 질문은 무엇일까요?' },
         { id: 5, text: '문서에서 근거를 찾아 답해야 하는 검증형 질문 하나를 만들어 주세요.' },
       ];
 
@@ -250,22 +253,22 @@ export default function RagEvaluationPage() {
         {
           id: 1,
           question: '문서의 핵심 목적 또는 주제를 한 문장으로 설명해 주세요.',
-          answer: '문서는 RAG 평가용 질문 생성과 결과 제출 기반의 평가 흐름을 설명합니다.',
-          retrievedContext: '기준 문서 업로드 → 질문 세트 생성 → 결과 파일 업로드 → 최종 평가',
+          answer: '문서는 RAG 평가를 위해 질문 생성과 결과 제출 기반 평가 흐름을 설명합니다.',
+          retrievedContext: '기준 문서 업로드 후 질문 세트 생성 및 결과 파일 업로드를 통해 최종 평가를 수행합니다.',
           score: 0.91,
         },
         {
           id: 2,
-          question: '문서에서 가장 중요한 절차 또는 단계는 무엇인가요?',
-          answer: '질문 생성 후 사용자 시스템 결과 파일을 다시 업로드하는 단계가 핵심입니다.',
-          retrievedContext: '사용자는 생성된 질문 파일을 다운로드해서 자신의 RAG 시스템에 넣는다.',
+          question: '문서에서 가장 중요한 단계는 무엇인가요?',
+          answer: '질문 생성 이후 사용자 테스트 결과 파일을 다시 업로드하는 단계가 중요합니다.',
+          retrievedContext: '사용자는 생성된 질문 파일을 내려받아 자신의 RAG 시스템에 적용한 뒤 결과를 제출합니다.',
           score: 0.84,
         },
         {
           id: 3,
           question: 'retrieved_context가 왜 필요한가요?',
-          answer: '검색된 근거 문맥이 있어야 검색 성능과 생성 성능을 함께 평가할 수 있습니다.',
-          retrievedContext: 'retrieved_context는 검색해서 가져온 문서 조각/근거 문맥을 뜻한다.',
+          answer: '검색된 근거 문맥이 있어야 검색 성능과 생성 성능을 함께 판단할 수 있습니다.',
+          retrievedContext: 'retrieved_context는 검색 단계에서 가져온 문서 조각 또는 근거 문맥을 의미합니다.',
           score: 0.73,
         },
       ]);
@@ -297,9 +300,7 @@ export default function RagEvaluationPage() {
   };
 
   const handleUpdateQuestion = (id: number, text: string) => {
-    setGeneratedQuestions((prev) =>
-      prev.map((question) => (question.id === id ? { ...question, text } : question)),
-    );
+    setGeneratedQuestions((prev) => prev.map((question) => (question.id === id ? { ...question, text } : question)));
   };
 
   const handleRemoveQuestion = (id: number) => {
@@ -322,11 +323,12 @@ export default function RagEvaluationPage() {
       await handleGenerateQuestions();
       return;
     }
+
     await handleRunEvaluation();
   };
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-slate-50 font-sans text-slate-900">
+    <div className="relative flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <Header
         activeMenu={activeMenu}
         isGenerating={isGenerating}
@@ -342,47 +344,52 @@ export default function RagEvaluationPage() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar activeMenu={activeMenu} setActiveMenu={(menu) => setActiveMenu(menu as MenuType)} />
 
-        <main className="flex-1 overflow-y-auto p-5 lg:p-6">
-          {activeMenu === '테스트셋 생성' ? (
-            <DatasetManager
-              isGenerating={isGenerating}
-              uploadedFile={uploadedFile}
-              generatedSummary={generatedSummary}
-              generatedQuestions={generatedQuestions}
-              hasDownloadedQuestionSet={hasDownloadedQuestionSet}
-              currentStep={currentStepValue}
-              isDragging={isDragging}
-              fileInputRef={fileInputRef}
-              handleDragOver={handleDragOver}
-              handleDragLeave={handleDragLeave}
-              handleDrop={handleDrop}
-              handleFileChange={handleFileChange}
-              formatFileSize={formatFileSize}
-              onRemoveFile={handleRemoveFile}
-              onGenerateQuestions={handleGenerateQuestions}
-              onDownloadQuestions={handleDownloadQuestions}
-              onMoveToEvaluation={() => setActiveMenu('성능 평가')}
-              onUpdateQuestion={handleUpdateQuestion}
-              onRemoveQuestion={handleRemoveQuestion}
-            />
-          ) : (
-            <EvaluationResult
-              isEvaluating={isEvaluating}
-              resultFile={resultFile}
-              generatedSummary={generatedSummary}
-              evaluationSummary={evaluationSummary}
-              evaluationRows={evaluationRows}
-              resultFileInputRef={resultFileInputRef}
-              isDraggingResult={isDraggingResult}
-              handleResultDragOver={handleResultDragOver}
-              handleResultDragLeave={handleResultDragLeave}
-              handleResultDrop={handleResultDrop}
-              handleResultFileChange={handleResultFileChange}
-              onRemoveResultFile={handleRemoveResultFile}
-              onRunEvaluation={handleRunEvaluation}
-              formatFileSize={formatFileSize}
-            />
-          )}
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          {/* h-full 체인: main → wrapper → inner → DatasetManager 까지 높이 전달 */}
+          <div className="flex h-full w-full flex-col px-4 py-4 lg:px-6 lg:py-6 2xl:px-8">
+            <div className="flex min-h-0 flex-1 flex-col">
+              {activeMenu === '테스트셋 생성' ? (
+                <DatasetManager
+                  isGenerating={isGenerating}
+                  uploadedFile={uploadedFile}
+                  generatedSummary={generatedSummary}
+                  generatedQuestions={generatedQuestions}
+                  hasDownloadedQuestionSet={hasDownloadedQuestionSet}
+                  currentStep={currentStepValue}
+                  isDragging={isDragging}
+                  fileInputRef={fileInputRef}
+                  handleDragOver={handleDragOver}
+                  handleDragLeave={handleDragLeave}
+                  handleDrop={handleDrop}
+                  handleFileChange={handleFileChange}
+                  formatFileSize={formatFileSize}
+                  onRemoveFile={handleRemoveFile}
+                  onGenerateQuestions={handleGenerateQuestions}
+                  onDownloadQuestions={handleDownloadQuestions}
+                  onMoveToEvaluation={() => setActiveMenu('성능 평가')}
+                  onUpdateQuestion={handleUpdateQuestion}
+                  onRemoveQuestion={handleRemoveQuestion}
+                />
+              ) : (
+                <EvaluationResult
+                  isEvaluating={isEvaluating}
+                  resultFile={resultFile}
+                  generatedSummary={generatedSummary}
+                  evaluationSummary={evaluationSummary}
+                  evaluationRows={evaluationRows}
+                  resultFileInputRef={resultFileInputRef}
+                  isDraggingResult={isDraggingResult}
+                  handleResultDragOver={handleResultDragOver}
+                  handleResultDragLeave={handleResultDragLeave}
+                  handleResultDrop={handleResultDrop}
+                  handleResultFileChange={handleResultFileChange}
+                  onRemoveResultFile={handleRemoveResultFile}
+                  onRunEvaluation={handleRunEvaluation}
+                  formatFileSize={formatFileSize}
+                />
+              )}
+            </div>
+          </div>
         </main>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 interface SidebarProps {
   activeMenu: string;
@@ -9,7 +9,7 @@ const MENUS = ['테스트셋 생성', '성능 평가'] as const;
 
 export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
   return (
-    <aside className="z-[40] flex w-[168px] flex-shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white px-2 py-4">
+    <aside className="z-[40] hidden w-[156px] flex-shrink-0 border-r border-slate-200 bg-white px-2 py-4 xl:flex xl:flex-col">
       <div className="px-2 pb-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Workflow</p>
       </div>
@@ -23,7 +23,7 @@ export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
               key={menu}
               type="button"
               onClick={() => setActiveMenu(menu)}
-              className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-2.5 text-left text-sm transition-colors ${
+              className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left text-sm transition-colors ${
                 isActive
                   ? 'border-blue-200 bg-blue-50 text-blue-700'
                   : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700'
@@ -59,10 +59,10 @@ export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
         })}
       </div>
 
-      <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <p className="text-[11px] font-semibold text-slate-700">현재 구조</p>
         <p className="mt-2 text-[11px] leading-5 text-slate-500">
-          검수는 테스트셋 생성 흐름 안에서 처리하고, 결과 제출 파일은 `retrieved_context`를 포함합니다.
+          검수는 테스트셋 생성 흐름 안에 포함되고, 결과 제출 파일은 `retrieved_context`를 포함합니다.
         </p>
       </div>
     </aside>

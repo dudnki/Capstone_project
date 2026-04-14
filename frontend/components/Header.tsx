@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 interface HeaderProps {
   activeMenu: string;
@@ -30,9 +30,9 @@ export default function Header({
   const loadingLabel = isTestsetMenu ? '질문 생성 중...' : '평가 실행 중...';
 
   return (
-    <header className="relative z-[60] flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4 shadow-[0_1px_4px_rgba(15,23,42,0.04)]">
+    <header className="relative z-[60] flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4 shadow-[0_1px_4px_rgba(15,23,42,0.04)] lg:px-6">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.16)]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.16)]">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
           </svg>
@@ -69,7 +69,7 @@ export default function Header({
       <button
         disabled={isDisabled}
         onClick={onActionClick}
-        className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${
+        className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
           isDisabled
             ? 'cursor-not-allowed bg-slate-200 text-slate-400'
             : 'bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.18)] hover:bg-blue-700'
