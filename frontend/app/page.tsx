@@ -14,8 +14,8 @@ import type {
   EvaluationRowStatus,
 } from '../src/types';
 
-const DOCUMENT_EXTENSIONS = ['.pdf', '.csv', '.txt', '.json', '.jsonl', '.md'];
-const RESULT_EXTENSIONS = ['.csv', '.json', '.jsonl'];
+const DOCUMENT_EXTENSIONS = ['.pdf', '.xlsx'];
+const RESULT_EXTENSIONS = ['.csv', '.xlsx'];
 
 export default function RagEvaluationPage() {
   const [activeMenu, setActiveMenu] = useState<MenuType>('테스트셋 생성');
@@ -56,7 +56,7 @@ export default function RagEvaluationPage() {
     if (activeMenu === '테스트셋 생성') {
       return '기준 문서를 업로드하고 질문 세트를 생성한 뒤 필요한 질문만 검토합니다.';
     }
-    return '사용자 결과 파일을 업로드해 검색 성능과 생성 성능을 함께 평가합니다.';
+    return '사용자 결과 엑셀 파일을 업로드해 답변 품질을 평가합니다.';
   }, [activeMenu]);
 
   const headerStepLabel = useMemo(() => {
@@ -240,43 +240,42 @@ export default function RagEvaluationPage() {
           id: 1,
           question: '문서의 핵심 목적 또는 주제를 한 문장으로 설명해 주세요.',
           answer:
-            '이 문서는 기준 문서를 바탕으로 질문을 생성하고, 사용자 결과 제출을 통해 RAG를 평가하는 흐름을 설명합니다.',
-          retrievedContext: [
-            '기준 문서를 업로드하면 질문 세트를 생성하고, 사용자는 결과 파일을 다시 업로드해 평가를 진행합니다.',
-            'retrieved_context를 포함한 결과를 받아 검색 성능과 생성 성능을 함께 평가합니다.',
-          ],
-          retrievalScore: 0.89,
-          generationScore: 0.92,
-          groundedScore: 0.87,
-          overallScore: 0.89,
-          status: getRowStatus(0.89),
+            '이 문서는 기준 문서를 바탕으로 질문을 생성하고, 사용자 결과 제출을 통해 챗봇 답변 품질을 평가하는 흐름을 설명합니다.',
+          questionFitScore: 0.93,
+          accuracyScore: 0.9,
+          documentAlignmentScore: 0.91,
+          overallScore: 0.91,
+          status: getRowStatus(0.91),
         },
         {
           id: 2,
           question: '문서에서 가장 중요한 원칙 또는 단계를 설명해 주세요.',
-          answer: '질문 생성 후 사용자 RAG에서 실제로 실행한 결과를 다시 제출받는 단계가 핵심입니다.',
-          retrievedContext: [
-            '사용자는 생성된 질문 파일을 내려받아 자신의 RAG 시스템에 적용한 뒤 결과를 제출합니다.',
-          ],
-          retrievalScore: 0.82,
-          generationScore: 0.85,
-          groundedScore: 0.79,
-          overallScore: 0.82,
-          status: getRowStatus(0.82),
+          answer: '질문 생성 후 사용자 챗봇에서 실행한 결과를 다시 제출받아 평가하는 단계가 핵심입니다.',
+          questionFitScore: 0.86,
+          accuracyScore: 0.84,
+          documentAlignmentScore: 0.82,
+          overallScore: 0.84,
+          status: getRowStatus(0.84),
         },
         {
           id: 3,
-          question: 'retrieved_context가 왜 필요한가요?',
-          answer: '검색된 문맥이 있어야 답변뿐 아니라 검색 단계까지 함께 평가할 수 있습니다.',
-          retrievedContext: [
-            'retrieved_context는 검색 단계에서 실제로 가져온 문서 조각 또는 근거 문맥을 의미합니다.',
-            '답변만 평가하면 QA 평가에 가깝고, 문맥까지 있어야 진짜 RAG 평가가 가능합니다.',
-          ],
-          retrievalScore: 0.71,
-          generationScore: 0.78,
-          groundedScore: 0.68,
-          overallScore: 0.72,
-          status: getRowStatus(0.72),
+          question: '결과 제출 파일에는 어떤 항목이 포함되어야 하나요?',
+          answer: 'question과 answer 컬럼이 포함된 엑셀 파일을 제출하면 됩니다.',
+          questionFitScore: 0.9,
+          accuracyScore: 0.88,
+          documentAlignmentScore: 0.86,
+          overallScore: 0.88,
+          status: getRowStatus(0.88),
+        },
+        {
+          id: 4,
+          question: '이 시스템은 무엇을 중심으로 평가하나요?',
+          answer: '검색 성능을 직접 평가하기보다 답변이 질문에 맞는지와 문서 내용과 일치하는지를 중심으로 봅니다.',
+          questionFitScore: 0.79,
+          accuracyScore: 0.76,
+          documentAlignmentScore: 0.74,
+          overallScore: 0.76,
+          status: getRowStatus(0.76),
         },
       ];
 
@@ -286,9 +285,9 @@ export default function RagEvaluationPage() {
       setEvaluationRows(rows);
       setEvaluationSummary({
         overallScore: average(rows.map((row) => row.overallScore)),
-        retrievalScore: average(rows.map((row) => row.retrievalScore)),
-        generationScore: average(rows.map((row) => row.generationScore)),
-        groundedScore: average(rows.map((row) => row.groundedScore)),
+        questionFitScore: average(rows.map((row) => row.questionFitScore)),
+        accuracyScore: average(rows.map((row) => row.accuracyScore)),
+        documentAlignmentScore: average(rows.map((row) => row.documentAlignmentScore)),
         evaluatedCount: rows.length,
       });
     } finally {

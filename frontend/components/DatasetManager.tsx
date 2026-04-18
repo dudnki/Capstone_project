@@ -23,7 +23,7 @@ interface DatasetManagerProps {
   onRemoveQuestion: (id: number) => void;
 }
 
-const DOCUMENT_EXTENSIONS = ['PDF', 'CSV', 'TXT', 'JSON', 'JSONL', 'MD'];
+const DOCUMENT_EXTENSIONS = ['PDF', 'csv', 'XLSX'];
 const STEPS = ['문서 업로드', '질문 생성', '질문 검토', '질문 다운로드'];
 
 export default function DatasetManager({
@@ -62,7 +62,7 @@ export default function DatasetManager({
     {
       step: '01',
       title: '기준 문서 업로드',
-      description: 'PDF, CSV, TXT, JSON, JSONL, MD 문서를 업로드합니다.',
+      description: 'PDF, CSV, XLSX 문서를 업로드합니다.',
     },
     {
       step: '02',
@@ -72,7 +72,7 @@ export default function DatasetManager({
     {
       step: '03',
       title: '질문 검토 및 다운로드',
-      description: '생성된 질문을 수정하거나 삭제한 뒤 파일로 내려받습니다.',
+      description: '생성된 질문을 수정하거나 삭제한 뒤 CSV 파일로 내려받습니다.',
     },
   ];
 
@@ -140,7 +140,7 @@ export default function DatasetManager({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.csv,.txt,.json,.jsonl,.md"
+              accept=".pdf, .csv, .xlsx"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -184,7 +184,7 @@ export default function DatasetManager({
                     업로드할 기준 문서를 선택하세요
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    PDF, CSV, TXT, JSON, JSONL, MD 문서를 업로드할 수 있습니다.
+                    PDF, CSV, XLSX 문서를 업로드할 수 있습니다.
                     <br />
                     파일을 끌어다 놓거나 아래 버튼을 눌러 선택하세요.
                   </p>
@@ -267,13 +267,10 @@ export default function DatasetManager({
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">제출 형식</p>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">결과 제출 파일 예시</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              성능 평가 단계에서는 아래 필드를 포함한 결과 파일이 필요합니다.
+              성능 평가 단계에서는 question, answer 컬럼이 포함된 엑셀 파일이 필요합니다.
             </p>
-            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-5 text-slate-700">{`{
-  "question": "...",
-  "answer": "...",
-  "retrieved_context": ["...", "..."]
-}`}</pre>
+            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`question | answer
+질문 내용 | 사용자 챗봇 답변`}</pre>
           </div>
         </section>
       )}

@@ -76,15 +76,6 @@ export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
           );
         })}
       </div>
-
-      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <p className="text-[11px] font-semibold text-slate-700">현재 구조</p>
-        <p className="mt-2 text-[11px] leading-5 text-slate-500">
-          질문 검토는 테스트셋 생성 흐름 안에 포함되고, 결과 제출 파일에는
-          <span className="font-semibold text-slate-600"> retrieved_context </span>
-          가 포함됩니다.
-        </p>
-      </div>
     </aside>
   );
 }

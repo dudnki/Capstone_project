@@ -20,7 +20,7 @@ interface EvaluationResultProps {
   restoreScrollTop: (top: number) => void;
 }
 
-const RESULT_EXTENSIONS = ['CSV', 'JSON', 'JSONL'];
+const RESULT_EXTENSIONS = ['CSV', 'XLSX'];
 
 export default function EvaluationResult({
   isEvaluating,
@@ -66,16 +66,16 @@ export default function EvaluationResult({
 
   const metricPreviewCards = [
     {
-      title: '검색 품질',
-      description: '검색된 문맥이 질문에 적절했는지 확인합니다.',
+      title: '질문 적합도',
+      description: '답변이 질문 의도에 맞게 작성되었는지 확인합니다.',
     },
     {
-      title: '생성 품질',
-      description: '답변이 질문 의도에 맞게 생성되었는지 확인합니다.',
+      title: '답변 정확도',
+      description: '답변 내용이 기준 문서와 비교해 정확한지 확인합니다.',
     },
     {
-      title: '근거 일치도',
-      description: '답변이 retrieved_context에 근거하고 있는지 확인합니다.',
+      title: '문서 일치도',
+      description: '답변이 기준 문서 내용에 기반했는지 확인합니다.',
     },
   ];
 
@@ -118,7 +118,7 @@ export default function EvaluationResult({
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">Evaluation</p>
               <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">성능 평가</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                사용자 결과 파일을 업로드해 검색 성능과 생성 성능을 한 화면에서 함께 확인합니다.
+                사용자 결과 엑셀 파일을 업로드해 답변 품질을 한 화면에서 확인합니다.
               </p>
             </div>
 
@@ -139,18 +139,18 @@ export default function EvaluationResult({
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-xl font-semibold text-slate-900">결과 파일 업로드</h3>
                 <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                  question / answer / retrieved_context
+                  question / answer
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-500">
-                질문 파일을 수행한 결과를 업로드하면 검색과 생성 품질을 함께 평가할 수 있습니다.
+                질문 파일을 수행한 결과를 CSV 또는 엑셀 파일로 업로드하면 답변 품질을 평가할 수 있습니다.
               </p>
             </div>
 
             <input
               ref={resultFileInputRef}
               type="file"
-              accept=".csv,.json,.jsonl"
+              accept=".csv, .xlsx"
               className="hidden"
               onChange={handleResultFileChange}
             />
@@ -194,9 +194,9 @@ export default function EvaluationResult({
                     평가할 결과 파일을 선택하세요
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    question, answer, retrieved_context 필드를 포함한 결과 파일을 업로드하세요.
+                    question, answer 컬럼이 포함된 CSV 또는 엑셀 파일을 업로드하세요.
                     <br />
-                    retrieved_context는 배열 형태로 제출해도 됩니다.
+                    현재는 답변 품질 평가 중심으로 결과를 제공합니다.
                   </p>
                   <button
                     type="button"
@@ -226,7 +226,7 @@ export default function EvaluationResult({
                 {resultFile ? '평가 실행 준비가 완료되었습니다' : '결과 파일을 업로드하면 상단에서 평가를 실행할 수 있습니다'}
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                retrieved_context가 있어야 검색 성능과 생성 성능을 함께 비교할 수 있습니다.
+                question, answer 기준으로 질문 적합도와 답변 정확도를 함께 확인합니다.
               </p>
             </div>
           </div>
@@ -252,13 +252,11 @@ export default function EvaluationResult({
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">제출 형식</p>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">결과 제출 파일 예시</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              아래와 같은 구조의 파일을 제출하면 평가에 사용할 수 있습니다.
+              아래와 같은 컬럼 구조의 엑셀 파일을 제출하면 평가에 사용할 수 있습니다.
             </p>
-            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-5 text-slate-700">{`{
-  "question": "...",
-  "answer": "...",
-  "retrieved_context": ["...", "..."]
-}`}</pre>
+            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`question | answer
+문서의 핵심 목적은 무엇인가요? | 기준 문서를 바탕으로 질문 세트를 만들고 답변 품질을 평가합니다.
+결과 제출 파일에는 어떤 항목이 필요한가요? | question과 answer 컬럼이 필요합니다.`}</pre>
           </div>
         </section>
       )}
@@ -270,31 +268,31 @@ export default function EvaluationResult({
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(evaluationSummary.overallScore)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">검색과 생성 결과를 종합한 평균 점수</p>
+            <p className="mt-2 text-xs text-slate-500">답변 품질을 종합한 평균 점수</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">검색 점수</p>
+            <p className="text-xs text-slate-500">질문 적합도</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-              {formatScore(evaluationSummary.retrievalScore)}
+              {formatScore(evaluationSummary.questionFitScore)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">질문에 맞는 문맥을 가져왔는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">답변이 질문 의도에 맞는지 평가</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">생성 점수</p>
+            <p className="text-xs text-slate-500">답변 정확도</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-              {formatScore(evaluationSummary.generationScore)}
+              {formatScore(evaluationSummary.accuracyScore)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변이 질문 의도에 맞게 생성되었는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">답변 내용이 기준 문서와 비교해 정확한지 평가</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">근거 일치도</p>
+            <p className="text-xs text-slate-500">문서 일치도</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-              {formatScore(evaluationSummary.groundedScore)}
+              {formatScore(evaluationSummary.documentAlignmentScore)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변이 검색 문맥에 근거하는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">답변이 기준 문서 내용에 기반했는지 평가</p>
           </div>
         </section>
       )}
@@ -309,7 +307,7 @@ export default function EvaluationResult({
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">평가 결과</p>
               <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">질문별 상세 결과</h3>
               <p className="mt-1 text-sm text-slate-500">
-                질문, 답변, 검색 문맥, 세부 점수를 한 번에 확인합니다.
+                질문, 사용자 답변, 세부 점수와 상태를 한 번에 확인합니다.
               </p>
             </div>
 
@@ -367,39 +365,27 @@ export default function EvaluationResult({
                         <p className="mt-1 text-sm font-semibold text-slate-900">{formatScore(row.overallScore)}</p>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <p className="text-[11px] text-slate-500">검색</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">{formatScore(row.retrievalScore)}</p>
+                        <p className="text-[11px] text-slate-500">질문 적합도</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">
+                          {formatScore(row.questionFitScore)}
+                        </p>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <p className="text-[11px] text-slate-500">생성</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">{formatScore(row.generationScore)}</p>
+                        <p className="text-[11px] text-slate-500">정확도</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{formatScore(row.accuracyScore)}</p>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <p className="text-[11px] text-slate-500">근거</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">{formatScore(row.groundedScore)}</p>
+                        <p className="text-[11px] text-slate-500">문서 일치도</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">
+                          {formatScore(row.documentAlignmentScore)}
+                        </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-xs font-semibold text-slate-500">생성 답변</p>
-                      <p className="mt-2 text-sm leading-7 text-slate-700">{row.answer}</p>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-xs font-semibold text-slate-500">검색 문맥</p>
-                      <div className="mt-2 space-y-2">
-                        {row.retrievedContext.map((context, index) => (
-                          <div
-                            key={`${row.id}-${index}`}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm leading-6 text-slate-700"
-                          >
-                            {context}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold text-slate-500">사용자 답변</p>
+                    <p className="mt-2 text-sm leading-7 text-slate-700">{row.answer}</p>
                   </div>
 
                   <div>

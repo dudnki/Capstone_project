@@ -7,15 +7,15 @@ export type QuestionItem = {
 
 export type GeneratedSummary = {
   questionCount: number;
-  format: 'csv' | 'json';
+  format: 'csv' | 'xlsx';
   createdAt: string;
 };
 
 export type EvaluationSummary = {
   overallScore: number;
-  retrievalScore: number;
-  generationScore: number;
-  groundedScore: number;
+  questionFitScore: number;
+  accuracyScore: number;
+  documentAlignmentScore: number;
   evaluatedCount: number;
 };
 
@@ -25,10 +25,9 @@ export type EvaluationRow = {
   id: number;
   question: string;
   answer: string;
-  retrievedContext: string[];
-  retrievalScore: number;
-  generationScore: number;
-  groundedScore: number;
+  questionFitScore: number;
+  accuracyScore: number;
+  documentAlignmentScore: number;
   overallScore: number;
   status: EvaluationRowStatus;
 };
