@@ -1,21 +1,21 @@
-import type { Metadata } from "next";
-import { Noto_Sans_KR, DM_Mono } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Noto_Sans_KR, DM_Mono } from 'next/font/google';
+import './globals.css';
 
 const notoSansKr = Noto_Sans_KR({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
 });
 
 const dmMono = DM_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-dm-mono",
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-dm-mono',
 });
 
 export const metadata: Metadata = {
-  title: "Pipeline Architect — RAG 평가 결과",
-  description: "RAG Evaluation Dashboard",
+  title: 'Pipeline Architect — RAG 평가 플랫폼',
+  description: '문서 업로드, 질문 세트 생성, 결과 제출 기반의 RAG 평가 플랫폼',
 };
 
 export default function RootLayout({

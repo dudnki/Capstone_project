@@ -14,7 +14,7 @@ export default function ReviewManager({
 }: ReviewManagerProps) {
 
   const getScoreStyle = (score: number) => {
-    if (score >= 0.8) return { bar: "#34d399", text: "#059669" };
+    if (score >= 0.8) return { bar: "#60a5fa", text: "#2563eb" };
     if (score >= 0.6) return { bar: "#fbbf24", text: "#d97706" };
     return { bar: "#f87171", text: "#e11d48" };
   };
@@ -29,7 +29,7 @@ export default function ReviewManager({
           <div className="mt-8 bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
             <div className="flex items-center justify-between" style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9' }}>
               <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>검수 대기 목록</h2>
-              <span className="text-xs font-semibold text-teal-600 bg-teal-50 border border-teal-100 px-2 py-1 rounded-md">{reviewItems.length}건 대기중</span>
+              <span className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-2 py-1 rounded-md">{reviewItems.length}건 대기중</span>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <colgroup><col style={{ width: '8%' }} /><col style={{ width: '35%' }} /><col style={{ width: '20%' }} /><col style={{ width: '15%' }} /><col style={{ width: '22%' }} /></colgroup>
@@ -51,7 +51,7 @@ export default function ReviewManager({
                     <td style={{ padding: '14px 16px' }}><span style={{ color: getScoreStyle(row.score).text, fontWeight: 600, fontSize: '12px' }}>{row.score.toFixed(2)}</span></td>
                     <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                       <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => handleApprove(row.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white transition-colors border border-emerald-200 hover:border-emerald-500 shadow-sm">승인</button>
+                        <button onClick={() => handleApprove(row.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-500 hover:text-white transition-colors border border-blue-200 hover:border-blue-500 shadow-sm">승인</button>
                         <button onClick={() => handleReject(row.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition-colors border border-rose-200 hover:border-rose-500 shadow-sm">반려</button>
                       </div>
                     </td>
@@ -62,8 +62,8 @@ export default function ReviewManager({
           </div>
         ) : showResults && reviewItems.length === 0 ? (
           <div className="mt-8 bg-white rounded-2xl flex flex-col items-center justify-center" style={{ padding: '80px 20px', border: '1px dashed #cbd5e1' }}>
-            <div className="flex items-center justify-center rounded-full bg-teal-50 mb-4" style={{ width: '64px', height: '64px' }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0d9488" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <div className="flex items-center justify-center rounded-full bg-blue-50 mb-4" style={{ width: '64px', height: '64px' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
             </div>
             <h3 className="text-base font-semibold text-slate-700">모든 항목의 검수가 완료되었습니다! 🎉</h3>
             <p className="text-sm text-slate-500 mt-2">수고하셨습니다. 새로운 문서를 추가해 파이프라인을 실행해 보세요.</p>
