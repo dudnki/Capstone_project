@@ -14,7 +14,7 @@ import type {
   EvaluationRowStatus,
 } from '../src/types';
 
-const DOCUMENT_EXTENSIONS = ['.pdf', '.xlsx'];
+const DOCUMENT_EXTENSIONS = ['.pdf', '.csv','.xlsx'];
 const RESULT_EXTENSIONS = ['.csv', '.xlsx'];
 
 export default function RagEvaluationPage() {
