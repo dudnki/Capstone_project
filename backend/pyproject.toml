@@ -1,3 +1,4 @@
+
 [project]
 name = "backend"
 version = "0.1.0"
@@ -10,21 +11,14 @@ dependencies = [
     "supabase>=2.28.3",
     "python-dotenv>=1.2.2",
     "python-multipart>=0.0.22",
-<<<<<<< HEAD
     "pymupdf>=1.27.2.2",
     "groq==0.31.0",
     "pydantic-settings>=2.13.1",
     "ragas>=0.4.3",
     "langchain-groq>=1.1.2",
     "datasets>=4.8.4",
-=======
->>>>>>> 1557ed46641e8fbc6be274249f5d768f612c932a
 ]
 
 [tool.uv]
 managed = true
-<<<<<<< HEAD
 dev-dependencies = []
-=======
-dev-dependencies = []
->>>>>>> 1557ed46641e8fbc6be274249f5d768f612c932a
