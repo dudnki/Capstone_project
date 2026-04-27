@@ -1,101 +1,81 @@
 import os
 import numpy as np
-from dotenv import load_dotenv
+import pandas as pd
 from datasets import Dataset
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
-from ragas.metrics import faithfulness, AnswerRelevancy
+from ragas.metrics import faithfulness, AnswerRelevancy, AnswerCorrectness, AnswerSimilarity
 from ragas import evaluate
-# Supabase는 프로젝트 설정에 맞게 supabase_client를 임포트한다고 가정합니다.
-# from app.services.supabase_client import supabase_client 
+# ⭐ 호환성 해결을 위한 임포트 추가
+from ragas.embeddings import LangchainEmbeddingsWrapper
 
-load_dotenv()
-
-# 1. 안전한 숫자 변환 함수 (전역 또는 유틸리티로 분리)
-def clean_score(value):
+def clean_score(df, column_name):
     try:
-        if isinstance(value, list):
-            value = value[0]
-        if value is None or (isinstance(value, (float, int)) and np.isnan(value)):
+        if column_name not in df.columns:
             return 0.0
-        return float(value)
+        val = df[column_name].iloc[0]
+        # nan 체크 강화
+        if pd.isna(val) or val is None or np.isnan(val):
+            return 0.0
+        return float(val)
     except:
         return 0.0
 
-# 2. 개별 문서 평가 함수
-def evaluate_user_document(context, question, ground_truth, user_answer):
-    # LLM 설정
+def get_eval_models():
     judge_llm = ChatGroq(
         api_key=os.environ.get("GROQ_API_KEY"),
         model="llama-3.3-70b-versatile",
-        temperature=0,
-        n=1
+        temperature=0
     )
     
-    # 임베딩 설정
-    real_embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    # 기초 임베딩 모델
+    raw_embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/distiluse-base-multilingual-cased-v1"
     )
+    
+    # ⭐ [핵심 수정] Ragas 호환성을 위해 Wrapper로 감싸기
+    # 이렇게 해야 'embed_text' 관련 AttributeError가 사라집니다.
+    ragas_embeddings = LangchainEmbeddingsWrapper(raw_embeddings)
+    
+    return judge_llm, ragas_embeddings
 
-    # Ragas 메트릭 설정
-    answer_relevancy_metric = AnswerRelevancy(llm=judge_llm, embeddings=real_embeddings)
+def evaluate_qa_quality(context, question, ground_truth, user_answer=None):
+    eval_target = user_answer if user_answer is not None else ground_truth
+    judge_llm, ragas_embeddings = get_eval_models()
+    
+    # 메트릭 설정 및 모델 주입
+    rel = AnswerRelevancy(llm=judge_llm, embeddings=ragas_embeddings)
+    corr = AnswerCorrectness(llm=judge_llm, embeddings=ragas_embeddings)
+    sim = AnswerSimilarity(embeddings=ragas_embeddings)
+    faith = faithfulness
+    faith.llm = judge_llm
 
     data_dict = {
-        "question": [question],
-        "answer": [user_answer],
-        "contexts": [[context]],
-        "ground_truth": [ground_truth]
-    }
-    dataset = Dataset.from_dict(data_dict)
-
-    # 평가 실행
-    result = evaluate(
-        dataset,
-        metrics=[faithfulness, answer_relevancy_metric],
-        llm=judge_llm,
-        embeddings=real_embeddings
-    )
-    
-    print(f"\n--- Ragas Raw Result: {result} ---")
-
-    final_scores = {
-        "faithfulness": clean_score(result["faithfulness"]),
-        "answer_relevancy": clean_score(result["answer_relevancy"])
+        "question": [str(question)],
+        "answer": [str(eval_target)],
+        "contexts": [[str(context)]],
+        "ground_truth": [str(ground_truth)]
     }
     
-    return final_scores
-
-# 3. 전체 프로젝트 실행 흐름 (시뮬레이션 포함)
-def run_project_flow():
     try:
-        # 가상의 데이터 설정 (실제로는 generate_gold_standard 등의 로직 필요)
-        raw_context = "수원 화성은 정약용의 거중기를 이용하여 1796년에 완공되었습니다."
-        question = "화성은 언제, 무엇을 이용해 지어졌나요?"
-        gold_truth = "1796년에 정약용의 거중기를 이용하여 지어졌습니다."
+        dataset = Dataset.from_dict(data_dict)
+        # 평가 실행
+        result = evaluate(
+            dataset, 
+            metrics=[faith, rel, corr, sim],
+            llm=judge_llm, 
+            embeddings=ragas_embeddings
+        )
+        df = result.to_pandas()
         
-        opponent_answer = "화성은 정약용의 거중기를 이용해 1796년에 지어졌습니다."
-
-        print("📊 [Ragas] 모델 품질 평가 시작...")
-        eval_result = evaluate_user_document(raw_context, question, gold_truth, opponent_answer)
-
-        # 결과 정리 및 출력
-        final_report = {
-            "question": question,
-            "gold_truth": gold_truth,
-            "opponent_answer": opponent_answer,
-            "faithfulness": eval_result["faithfulness"],
-            "answer_relevancy": eval_result["answer_relevancy"],
+        print(f"📊 Raw Scores Check - Correctness: {df['answer_correctness'].iloc[0]}, Similarity: {df['answer_similarity'].iloc[0]}")
+        
+        return {
+            "faithfulness": clean_score(df, "faithfulness"),
+            "answer_relevancy": clean_score(df, "answer_relevancy"),
+            "answer_correctness": clean_score(df, "answer_correctness"),
+            "answer_similarity": clean_score(df, "answer_similarity")
         }
-
-        print("\n" + "="*50)
-        print(f"🎯 질문: {final_report['question']}")
-        print(f"✅ 정답: {final_report['gold_truth']}")
-        print(f"⭐ 충실도(Faithfulness): {final_report['faithfulness']:.4f}")
-        print(f"⭐ 적절성(Relevancy): {final_report['answer_relevancy']:.4f}")
-        print("🎉 평가 프로세스가 완료되었습니다.")
-
     except Exception as e:
-        print(f"❌ 실행 중 오류 발생: {e}")
-
-if __name__ == "__main__":
-    run_project_flow()
+        print(f"❌ Ragas 평가 도중 예외 발생: {e}")
+        return {k: 0.0 for k in ["faithfulness", "answer_relevancy", "answer_correctness", "answer_similarity"]}
