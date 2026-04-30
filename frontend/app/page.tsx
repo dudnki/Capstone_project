@@ -15,7 +15,7 @@ import type {
   DocumentHistoryItem,
 } from '../src/types';
 
-const DOCUMENT_EXTENSIONS = ['.pdf', '.csv', '.xlsx'];
+const DOCUMENT_EXTENSIONS = ['.pdf'];
 const RESULT_EXTENSIONS = ['.csv'];
 
 export default function RagEvaluationPage() {
@@ -56,14 +56,14 @@ export default function RagEvaluationPage() {
 
   const headerDescription = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
-      return '기준 문서를 업로드하고 질문 세트를 생성한 뒤 CSV로 내려받습니다.';
+      return '기준 PDF 문서를 업로드하고 질문 세트를 생성한 뒤 CSV로 내려받습니다.';
     }
     return '사용자 결과 CSV 파일을 업로드해 답변 품질을 평가합니다.';
   }, [activeMenu]);
 
   const headerStepLabel = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
-      const labels = ['1단계 문서 업로드', '2단계 질문 생성', '3단계 질문 다운로드'];
+      const labels = ['1단계 PDF 업로드', '2단계 질문 생성', '3단계 질문 다운로드'];
       return labels[Math.min(currentStepValue, 3) - 1];
     }
 
@@ -72,7 +72,7 @@ export default function RagEvaluationPage() {
 
   const headerPrimaryStatus = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
-      return uploadedFile ? `문서 ${uploadedFile.name}` : '문서 미업로드';
+      return uploadedFile ? `문서 ${uploadedFile.name}` : 'PDF 미업로드';
     }
 
     return resultFile ? `결과 ${resultFile.name}` : '결과 CSV 미업로드';

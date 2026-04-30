@@ -20,8 +20,8 @@ interface DatasetManagerProps {
   onMoveToEvaluation: () => void;
 }
 
-const DOCUMENT_EXTENSIONS = ['PDF', 'CSV', 'XLSX'];
-const STEPS = ['문서 업로드', '질문 생성', '질문 다운로드'];
+const DOCUMENT_EXTENSIONS = ['PDF'];
+const STEPS = ['PDF 업로드', '질문 생성', '질문 다운로드'];
 
 export default function DatasetManager({
   uploadedFile,
@@ -45,7 +45,7 @@ export default function DatasetManager({
 
   const statusCards = useMemo(
     () => [
-      { label: '문서 업로드', value: uploadedFile ? '완료' : '대기' },
+      { label: 'PDF 업로드', value: uploadedFile ? '완료' : '대기' },
       { label: '질문 세트', value: generatedSummary ? `${generatedSummary.questionCount}개 생성` : '미생성' },
       { label: '질문 다운로드', value: hasDownloadedQuestionSet ? '완료' : '전' },
     ],
@@ -55,13 +55,13 @@ export default function DatasetManager({
   const emptyGuideSteps = [
     {
       step: '01',
-      title: '기준 문서 업로드',
-      description: 'PDF, CSV, XLSX 문서를 업로드합니다.',
+      title: '기준 PDF 업로드',
+      description: '평가 기준으로 사용할 PDF 문서를 업로드합니다.',
     },
     {
       step: '02',
       title: '질문 세트 생성',
-      description: '문서를 기반으로 평가용 질문 세트를 자동 생성합니다.',
+      description: 'PDF 내용을 기반으로 평가용 질문 세트를 자동 생성합니다.',
     },
     {
       step: '03',
@@ -83,7 +83,7 @@ export default function DatasetManager({
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">Testset Builder</p>
               <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">테스트셋 생성</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                기준 문서를 업로드하고 평가용 질문 세트를 생성한 뒤 CSV 파일로 내려받습니다.
+                기준 PDF 문서를 업로드하고 평가용 질문 세트를 생성한 뒤 CSV 파일로 내려받습니다.
               </p>
             </div>
 
@@ -103,13 +103,13 @@ export default function DatasetManager({
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-xl font-semibold text-slate-900">기준 문서 업로드</h3>
+                  <h3 className="text-xl font-semibold text-slate-900">기준 PDF 업로드</h3>
                   <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                     {STEPS[safeStep - 1]}
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-slate-500">
-                  업로드한 문서를 바탕으로 평가용 질문 세트를 생성합니다.
+                  업로드한 PDF 문서를 바탕으로 평가용 질문 세트를 생성합니다.
                 </p>
               </div>
 
@@ -134,7 +134,7 @@ export default function DatasetManager({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf, .csv, .xlsx"
+              accept=".pdf"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -150,7 +150,7 @@ export default function DatasetManager({
               {uploadedFile ? (
                 <div className="flex w-full flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-500">선택된 문서</p>
+                    <p className="text-xs font-medium text-slate-500">선택된 PDF 문서</p>
                     <p className="mt-1 truncate text-xl font-semibold text-slate-900">{uploadedFile.name}</p>
                     <p className="mt-2 text-sm text-slate-500">{formatFileSize(uploadedFile.size)}</p>
                   </div>
@@ -175,10 +175,10 @@ export default function DatasetManager({
               ) : (
                 <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
                   <p className="text-2xl font-semibold tracking-tight text-slate-900">
-                    업로드할 기준 문서를 선택하세요
+                    업로드할 기준 PDF를 선택하세요
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    PDF, CSV, XLSX 문서를 업로드할 수 있습니다.
+                    평가 기준으로 사용할 PDF 문서를 업로드할 수 있습니다.
                     <br />
                     파일을 끌어다 놓거나 아래 버튼을 눌러 선택하세요.
                   </p>
@@ -187,7 +187,7 @@ export default function DatasetManager({
                     onClick={() => fileInputRef.current?.click()}
                     className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.18)] hover:bg-blue-700"
                   >
-                    문서 선택
+                    PDF 선택
                   </button>
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
                     {DOCUMENT_EXTENSIONS.map((ext) => (
@@ -207,7 +207,7 @@ export default function DatasetManager({
           <div className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">
-                {uploadedFile ? '질문 생성 준비가 완료되었습니다' : '문서를 올리면 상단에서 질문을 생성할 수 있습니다'}
+                {uploadedFile ? '질문 생성 준비가 완료되었습니다' : 'PDF를 올리면 상단에서 질문을 생성할 수 있습니다'}
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-500">
                 생성된 질문은 CSV로 내려받아 사용자의 챗봇 또는 RAG 시스템에서 실행합니다.
@@ -259,12 +259,12 @@ export default function DatasetManager({
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">제출 형식</p>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">결과 제출 파일 예시</h3>
+            <h3 className="mt-2 text-lg font-semibold text-slate-900">결과 제출 CSV 예시</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              성능 평가 단계에서는 question, answer 컬럼이 포함된 엑셀 파일이 필요합니다.
+              성능 평가 단계에서는 question, answer 컬럼이 포함된 CSV 파일이 필요합니다.
             </p>
-            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`question | answer
-질문 내용 | 사용자 챗봇 답변`}</pre>
+            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`question,answer
+질문 내용,사용자 챗봇 답변`}</pre>
           </div>
         </section>
       )}
