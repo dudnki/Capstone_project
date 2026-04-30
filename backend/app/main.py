@@ -1,3 +1,10 @@
+
+# C:\Users\65car\capston_project1\Capstone_project\backend\app\main.py
+import sys
+import os
+print(f"현재 서버 파이썬 경로: {sys.executable}")
+print(f"현재 서버 환경 변수(PATH): {os.environ.get('PATH')}")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import upload, pipeline, evaluations

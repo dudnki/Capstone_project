@@ -20,7 +20,7 @@ interface EvaluationResultProps {
   restoreScrollTop: (top: number) => void;
 }
 
-const RESULT_EXTENSIONS = ['CSV', 'XLSX'];
+const RESULT_EXTENSIONS = ['CSV'];
 
 export default function EvaluationResult({
   isEvaluating,
@@ -55,7 +55,7 @@ export default function EvaluationResult({
       value: generatedSummary ? `${generatedSummary.questionCount}개 준비` : '필요',
     },
     {
-      label: '결과 파일',
+      label: '결과 CSV',
       value: resultFile ? '업로드됨' : '없음',
     },
     {
@@ -118,7 +118,7 @@ export default function EvaluationResult({
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">Evaluation</p>
               <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">성능 평가</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                사용자 결과 엑셀 파일을 업로드해 답변 품질을 한 화면에서 확인합니다.
+                사용자 결과 CSV 파일을 업로드해 답변 품질을 한 화면에서 확인합니다.
               </p>
             </div>
 
@@ -137,20 +137,20 @@ export default function EvaluationResult({
           <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-xl font-semibold text-slate-900">결과 파일 업로드</h3>
+                <h3 className="text-xl font-semibold text-slate-900">결과 CSV 업로드</h3>
                 <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                   question / answer
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-500">
-                질문 파일을 수행한 결과를 CSV 또는 엑셀 파일로 업로드하면 답변 품질을 평가할 수 있습니다.
+                질문 파일을 수행한 결과를 CSV 파일로 업로드하면 답변 품질을 평가할 수 있습니다.
               </p>
             </div>
 
             <input
               ref={resultFileInputRef}
               type="file"
-              accept=".csv, .xlsx"
+              accept=".csv"
               className="hidden"
               onChange={handleResultFileChange}
             />
@@ -166,7 +166,7 @@ export default function EvaluationResult({
               {resultFile ? (
                 <div className="flex w-full flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-500">업로드된 결과 파일</p>
+                    <p className="text-xs font-medium text-slate-500">업로드된 결과 CSV</p>
                     <p className="mt-1 truncate text-xl font-semibold text-slate-900">{resultFile.name}</p>
                     <p className="mt-2 text-sm text-slate-500">{formatFileSize(resultFile.size)}</p>
                   </div>
@@ -191,10 +191,10 @@ export default function EvaluationResult({
               ) : (
                 <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
                   <p className="text-2xl font-semibold tracking-tight text-slate-900">
-                    평가할 결과 파일을 선택하세요
+                    평가할 결과 CSV를 선택하세요
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    question, answer 컬럼이 포함된 CSV 또는 엑셀 파일을 업로드하세요.
+                    question, answer 컬럼이 포함된 CSV 파일을 업로드하세요.
                     <br />
                     현재는 답변 품질 평가 중심으로 결과를 제공합니다.
                   </p>
@@ -203,7 +203,7 @@ export default function EvaluationResult({
                     onClick={() => resultFileInputRef.current?.click()}
                     className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.18)] hover:bg-blue-700"
                   >
-                    결과 파일 선택
+                    결과 CSV 선택
                   </button>
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
                     {RESULT_EXTENSIONS.map((ext) => (
@@ -223,12 +223,27 @@ export default function EvaluationResult({
           <div className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">
-                {resultFile ? '평가 실행 준비가 완료되었습니다' : '결과 파일을 업로드하면 상단에서 평가를 실행할 수 있습니다'}
+                {resultFile ? '평가 실행 준비가 완료되었습니다' : '결과 CSV를 업로드하면 상단에서 평가를 실행할 수 있습니다'}
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-500">
                 question, answer 기준으로 질문 적합도와 답변 정확도를 함께 확인합니다.
               </p>
             </div>
+
+            {resultFile && (
+              <button
+                type="button"
+                onClick={onRunEvaluation}
+                disabled={isEvaluating}
+                className={`rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
+                  isEvaluating
+                    ? 'cursor-not-allowed bg-slate-200 text-slate-400'
+                    : 'border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }`}
+              >
+                {isEvaluating ? '평가 실행 중...' : '평가 실행'}
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -250,13 +265,13 @@ export default function EvaluationResult({
 
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">제출 형식</p>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">결과 제출 파일 예시</h3>
+            <h3 className="mt-2 text-lg font-semibold text-slate-900">결과 제출 CSV 예시</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              아래와 같은 컬럼 구조의 엑셀 파일을 제출하면 평가에 사용할 수 있습니다.
+              아래와 같은 컬럼 구조의 CSV 파일을 제출하면 평가에 사용할 수 있습니다.
             </p>
-            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`question | answer
-문서의 핵심 목적은 무엇인가요? | 기준 문서를 바탕으로 질문 세트를 만들고 답변 품질을 평가합니다.
-결과 제출 파일에는 어떤 항목이 필요한가요? | question과 answer 컬럼이 필요합니다.`}</pre>
+            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`question,answer
+문서의 핵심 목적은 무엇인가요?,기준 문서를 바탕으로 질문 세트를 만들고 답변 품질을 평가합니다.
+결과 제출 파일에는 어떤 항목이 필요한가요?,question과 answer 컬럼이 필요합니다.`}</pre>
           </div>
         </section>
       )}

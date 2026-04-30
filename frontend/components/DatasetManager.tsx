@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo } from 'react';
 import type { QuestionItem, GeneratedSummary } from '../src/types';
 
 interface DatasetManagerProps {
@@ -16,15 +16,12 @@ interface DatasetManagerProps {
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   formatFileSize: (bytes: number) => string;
   onRemoveFile: () => void;
-  onGenerateQuestions: () => void;
   onDownloadQuestions: () => void;
   onMoveToEvaluation: () => void;
-  onUpdateQuestion: (id: number, text: string) => void;
-  onRemoveQuestion: (id: number) => void;
 }
 
-const DOCUMENT_EXTENSIONS = ['PDF', 'csv', 'XLSX'];
-const STEPS = ['문서 업로드', '질문 생성', '질문 검토', '질문 다운로드'];
+const DOCUMENT_EXTENSIONS = ['PDF', 'CSV', 'XLSX'];
+const STEPS = ['문서 업로드', '질문 생성', '질문 다운로드'];
 
 export default function DatasetManager({
   uploadedFile,
@@ -42,12 +39,9 @@ export default function DatasetManager({
   onRemoveFile,
   onDownloadQuestions,
   onMoveToEvaluation,
-  onUpdateQuestion,
-  onRemoveQuestion,
 }: DatasetManagerProps) {
-  const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
-
   const hasQuestions = generatedQuestions.length > 0;
+  const safeStep = Math.min(currentStep, STEPS.length);
 
   const statusCards = useMemo(
     () => [
@@ -71,8 +65,8 @@ export default function DatasetManager({
     },
     {
       step: '03',
-      title: '질문 검토 및 다운로드',
-      description: '생성된 질문을 수정하거나 삭제한 뒤 CSV 파일로 내려받습니다.',
+      title: 'CSV 다운로드',
+      description: '생성된 질문 파일을 내려받아 사용자 챗봇/RAG 시스템에서 실행합니다.',
     },
   ];
 
@@ -89,7 +83,7 @@ export default function DatasetManager({
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">Testset Builder</p>
               <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">테스트셋 생성</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                기준 문서를 업로드하고 질문을 생성한 뒤, 같은 화면에서 바로 검토하고 내려받습니다.
+                기준 문서를 업로드하고 평가용 질문 세트를 생성한 뒤 CSV 파일로 내려받습니다.
               </p>
             </div>
 
@@ -111,7 +105,7 @@ export default function DatasetManager({
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-xl font-semibold text-slate-900">기준 문서 업로드</h3>
                   <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                    {STEPS[Math.min(currentStep, 4) - 1]}
+                    {STEPS[safeStep - 1]}
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-slate-500">
@@ -122,14 +116,14 @@ export default function DatasetManager({
               <div className="w-full max-w-[280px] rounded-xl border border-slate-200 bg-white px-4 py-3">
                 <div className="flex items-center justify-between text-[11px] text-slate-500">
                   <span>진행 단계</span>
-                  <span className="font-semibold text-blue-700">{Math.min(currentStep, 4)} / 4</span>
+                  <span className="font-semibold text-blue-700">{safeStep} / 3</span>
                 </div>
-                <div className="mt-2 grid grid-cols-4 gap-1.5">
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
                   {STEPS.map((step, index) => (
                     <div
                       key={step}
                       className={`h-1.5 rounded-full ${
-                        index + 1 <= Math.min(currentStep, 4) ? 'bg-blue-600' : 'bg-slate-200'
+                        index + 1 <= safeStep ? 'bg-blue-600' : 'bg-slate-200'
                       }`}
                     />
                   ))}
@@ -216,7 +210,7 @@ export default function DatasetManager({
                 {uploadedFile ? '질문 생성 준비가 완료되었습니다' : '문서를 올리면 상단에서 질문을 생성할 수 있습니다'}
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                생성된 질문은 아래에서 바로 수정하거나 삭제할 수 있습니다.
+                생성된 질문은 CSV로 내려받아 사용자의 챗봇 또는 RAG 시스템에서 실행합니다.
               </p>
             </div>
 
@@ -279,8 +273,11 @@ export default function DatasetManager({
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
           <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">질문 검토</p>
-              <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">질문 검토 및 수정</h3>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">Generated Questions</p>
+              <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">생성된 질문 미리보기</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                생성된 질문 세트를 확인한 뒤 CSV로 내려받아 사용자 챗봇/RAG 시스템에서 실행합니다.
+              </p>
             </div>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
               {generatedQuestions.length}개 질문
@@ -288,50 +285,16 @@ export default function DatasetManager({
           </div>
 
           <div className="divide-y divide-slate-100">
-            {generatedQuestions.map((question, index) => {
-              const isEditing = editingQuestionId === question.id;
-
-              return (
-                <div key={question.id} className="px-6 py-4">
-                  <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="flex min-w-0 flex-1 gap-3">
-                      <span className="mt-0.5 inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-50 px-2 text-xs font-bold text-blue-700">
-                        {index + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        {isEditing ? (
-                          <textarea
-                            value={question.text}
-                            onChange={(e) => onUpdateQuestion(question.id, e.target.value)}
-                            rows={3}
-                            className="w-full rounded-xl border border-blue-200 bg-blue-50/40 px-3 py-2.5 text-sm leading-6 text-slate-700 outline-none focus:border-blue-400"
-                          />
-                        ) : (
-                          <p className="text-sm leading-7 text-slate-700">{question.text}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2 pl-10 xl:pl-0">
-                      <button
-                        type="button"
-                        onClick={() => setEditingQuestionId(isEditing ? null : question.id)}
-                        className="rounded-xl border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
-                      >
-                        {isEditing ? '완료' : '수정'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onRemoveQuestion(question.id)}
-                        className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  </div>
+            {generatedQuestions.map((question, index) => (
+              <div key={question.id} className="px-6 py-4">
+                <div className="flex min-w-0 gap-3">
+                  <span className="mt-0.5 inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-50 px-2 text-xs font-bold text-blue-700">
+                    {index + 1}
+                  </span>
+                  <p className="text-sm leading-7 text-slate-700">{question.text}</p>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </section>
       )}

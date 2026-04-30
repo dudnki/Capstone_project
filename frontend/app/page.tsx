@@ -12,10 +12,12 @@ import type {
   EvaluationSummary,
   EvaluationRow,
   EvaluationRowStatus,
+  DocumentHistoryItem,
+  DocumentHistoryStatus,
 } from '../src/types';
 
-const DOCUMENT_EXTENSIONS = ['.pdf', '.csv','.xlsx'];
-const RESULT_EXTENSIONS = ['.csv', '.xlsx'];
+const DOCUMENT_EXTENSIONS = ['.pdf', '.csv', '.xlsx'];
+const RESULT_EXTENSIONS = ['.csv'];
 
 export default function RagEvaluationPage() {
   const [activeMenu, setActiveMenu] = useState<MenuType>('테스트셋 생성');
@@ -32,6 +34,9 @@ export default function RagEvaluationPage() {
   const [evaluationSummary, setEvaluationSummary] = useState<EvaluationSummary | null>(null);
   const [evaluationRows, setEvaluationRows] = useState<EvaluationRow[]>([]);
 
+  const [documentHistories, setDocumentHistories] = useState<DocumentHistoryItem[]>([]);
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
+
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingResult, setIsDraggingResult] = useState(false);
 
@@ -45,27 +50,25 @@ export default function RagEvaluationPage() {
   function getCurrentStep() {
     if (!uploadedFile) return 1;
     if (!generatedSummary) return 2;
-    if (!hasDownloadedQuestionSet) return 3;
-    if (!resultFile) return 4;
-    return 5;
+    return 3;
   }
 
   const currentStepValue = getCurrentStep();
 
   const headerDescription = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
-      return '기준 문서를 업로드하고 질문 세트를 생성한 뒤 필요한 질문만 검토합니다.';
+      return '기준 문서를 업로드하고 질문 세트를 생성한 뒤 CSV로 내려받습니다.';
     }
-    return '사용자 결과 엑셀 파일을 업로드해 답변 품질을 평가합니다.';
+    return '사용자 결과 CSV 파일을 업로드해 답변 품질을 평가합니다.';
   }, [activeMenu]);
 
   const headerStepLabel = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
-      const labels = ['1단계 문서 업로드', '2단계 질문 생성', '3단계 질문 검토', '4단계 질문 다운로드'];
-      return labels[Math.min(currentStepValue, 4) - 1];
+      const labels = ['1단계 문서 업로드', '2단계 질문 생성', '3단계 질문 다운로드'];
+      return labels[Math.min(currentStepValue, 3) - 1];
     }
 
-    return evaluationSummary ? '평가 결과 확인' : '결과 파일 업로드';
+    return evaluationSummary ? '평가 결과 확인' : '결과 CSV 업로드';
   }, [activeMenu, currentStepValue, evaluationSummary]);
 
   const headerPrimaryStatus = useMemo(() => {
@@ -73,11 +76,12 @@ export default function RagEvaluationPage() {
       return uploadedFile ? `문서 ${uploadedFile.name}` : '문서 미업로드';
     }
 
-    return resultFile ? `결과 ${resultFile.name}` : '결과 파일 미업로드';
+    return resultFile ? `결과 ${resultFile.name}` : '결과 CSV 미업로드';
   }, [activeMenu, uploadedFile, resultFile]);
 
   const headerSecondaryStatus = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
+      if (hasDownloadedQuestionSet) return '질문 다운로드 완료';
       return generatedSummary ? `질문 ${generatedSummary.questionCount}개` : '질문 생성 전';
     }
 
@@ -86,7 +90,7 @@ export default function RagEvaluationPage() {
       : generatedSummary
         ? '질문 세트 준비됨'
         : '질문 세트 필요';
-  }, [activeMenu, generatedSummary, evaluationSummary]);
+  }, [activeMenu, generatedSummary, evaluationSummary, hasDownloadedQuestionSet]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -102,6 +106,29 @@ export default function RagEvaluationPage() {
     return allowedExtensions.includes(fileExt);
   };
 
+  const getFileExtension = (fileName: string) => {
+    return fileName.split('.').pop()?.toUpperCase() ?? 'FILE';
+  };
+
+  const createHistoryId = () => {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  };
+
+  const updateActiveDocumentHistory = (
+    patch: Partial<
+      Pick<
+        DocumentHistoryItem,
+        'questionCount' | 'status' | 'generatedSummary' | 'generatedQuestions' | 'hasDownloadedQuestionSet'
+      >
+    >,
+  ) => {
+    if (!activeDocumentId) return;
+
+    setDocumentHistories((prev) =>
+      prev.map((item) => (item.id === activeDocumentId ? { ...item, ...patch } : item)),
+    );
+  };
+
   const resetGeneratedData = () => {
     setGeneratedSummary(null);
     setGeneratedQuestions([]);
@@ -113,13 +140,64 @@ export default function RagEvaluationPage() {
     setEvaluationRows([]);
   };
 
+  const applyDocumentFile = (file: File) => {
+    const nextId = createHistoryId();
+    const nextHistory: DocumentHistoryItem = {
+      id: nextId,
+      file,
+      name: file.name,
+      extension: getFileExtension(file.name),
+      size: file.size,
+      uploadedAt: new Date().toLocaleString('ko-KR', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      questionCount: 0,
+      status: 'uploaded',
+      generatedSummary: null,
+      generatedQuestions: [],
+      hasDownloadedQuestionSet: false,
+    };
+
+    setUploadedFile(file);
+    setResultFile(null);
+    resetGeneratedData();
+    resetEvaluationData();
+    setActiveDocumentId(nextId);
+    setActiveMenu('테스트셋 생성');
+
+    setDocumentHistories((prev) => [nextHistory, ...prev].slice(0, 12));
+  };
+
+  const updateDocumentStatus = (status: DocumentHistoryStatus) => {
+    updateActiveDocumentHistory({ status });
+  };
+
+  const handleSelectDocumentHistory = (id: string) => {
+    const selected = documentHistories.find((item) => item.id === id);
+    if (!selected) return;
+
+    setActiveDocumentId(selected.id);
+    setUploadedFile(selected.file);
+    setGeneratedSummary(selected.generatedSummary);
+    setGeneratedQuestions(selected.generatedQuestions);
+    setHasDownloadedQuestionSet(selected.hasDownloadedQuestionSet);
+    setResultFile(null);
+    resetEvaluationData();
+    setActiveMenu('테스트셋 생성');
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (resultFileInputRef.current) resultFileInputRef.current.value = '';
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (validateFile(file, DOCUMENT_EXTENSIONS)) {
-      setUploadedFile(file);
-      resetGeneratedData();
+      applyDocumentFile(file);
     } else if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -155,8 +233,7 @@ export default function RagEvaluationPage() {
     if (!file) return;
 
     if (validateFile(file, DOCUMENT_EXTENSIONS)) {
-      setUploadedFile(file);
-      resetGeneratedData();
+      applyDocumentFile(file);
     }
   };
 
@@ -210,13 +287,23 @@ export default function RagEvaluationPage() {
         { id: 5, text: '실제 사용자 관점에서 자주 물을 만한 질문을 하나 만들어 주세요.' },
       ];
 
-      setGeneratedQuestions(questions);
-      setGeneratedSummary({
+      const nextSummary: GeneratedSummary = {
         questionCount: questions.length,
         format: 'csv',
         createdAt: new Date().toLocaleString('ko-KR'),
-      });
+      };
+
+      setGeneratedQuestions(questions);
+      setGeneratedSummary(nextSummary);
       setHasDownloadedQuestionSet(false);
+
+      updateActiveDocumentHistory({
+        questionCount: questions.length,
+        status: 'generated',
+        generatedSummary: nextSummary,
+        generatedQuestions: questions,
+        hasDownloadedQuestionSet: false,
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -260,7 +347,7 @@ export default function RagEvaluationPage() {
         {
           id: 3,
           question: '결과 제출 파일에는 어떤 항목이 포함되어야 하나요?',
-          answer: 'question과 answer 컬럼이 포함된 엑셀 파일을 제출하면 됩니다.',
+          answer: 'question과 answer 컬럼이 포함된 CSV 파일을 제출하면 됩니다.',
           questionFitScore: 0.9,
           accuracyScore: 0.88,
           documentAlignmentScore: 0.86,
@@ -290,6 +377,8 @@ export default function RagEvaluationPage() {
         documentAlignmentScore: average(rows.map((row) => row.documentAlignmentScore)),
         evaluatedCount: rows.length,
       });
+
+      updateDocumentStatus('evaluated');
     } finally {
       setIsEvaluating(false);
     }
@@ -315,24 +404,10 @@ export default function RagEvaluationPage() {
 
     URL.revokeObjectURL(url);
     setHasDownloadedQuestionSet(true);
-  };
 
-  const handleUpdateQuestion = (id: number, text: string) => {
-    setGeneratedQuestions((prev) => prev.map((question) => (question.id === id ? { ...question, text } : question)));
-  };
-
-  const handleRemoveQuestion = (id: number) => {
-    setGeneratedQuestions((prev) => {
-      const next = prev.filter((question) => question.id !== id);
-      setGeneratedSummary((current) =>
-        current
-          ? {
-              ...current,
-              questionCount: next.length,
-            }
-          : current,
-      );
-      return next;
+    updateActiveDocumentHistory({
+      status: 'downloaded',
+      hasDownloadedQuestionSet: true,
     });
   };
 
@@ -374,7 +449,13 @@ export default function RagEvaluationPage() {
       />
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar activeMenu={activeMenu} setActiveMenu={(menu) => setActiveMenu(menu as MenuType)} />
+        <Sidebar
+          activeMenu={activeMenu}
+          setActiveMenu={(menu) => setActiveMenu(menu as MenuType)}
+          documentHistories={documentHistories}
+          activeDocumentId={activeDocumentId}
+          onSelectDocumentHistory={handleSelectDocumentHistory}
+        />
 
         <main
           ref={mainScrollRef}
@@ -399,11 +480,8 @@ export default function RagEvaluationPage() {
                   handleFileChange={handleFileChange}
                   formatFileSize={formatFileSize}
                   onRemoveFile={handleRemoveFile}
-                  onGenerateQuestions={handleGenerateQuestions}
                   onDownloadQuestions={handleDownloadQuestions}
                   onMoveToEvaluation={() => setActiveMenu('성능 평가')}
-                  onUpdateQuestion={handleUpdateQuestion}
-                  onRemoveQuestion={handleRemoveQuestion}
                 />
               ) : (
                 <EvaluationResult

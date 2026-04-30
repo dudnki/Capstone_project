@@ -32,6 +32,22 @@ export type EvaluationRow = {
   status: EvaluationRowStatus;
 };
 
+export type DocumentHistoryStatus = 'uploaded' | 'generated' | 'downloaded' | 'evaluated';
+
+export type DocumentHistoryItem = {
+  id: string;
+  file: File;
+  name: string;
+  extension: string;
+  size: number;
+  uploadedAt: string;
+  questionCount: number;
+  status: DocumentHistoryStatus;
+  generatedSummary: GeneratedSummary | null;
+  generatedQuestions: QuestionItem[];
+  hasDownloadedQuestionSet: boolean;
+};
+
 export interface EvaluationItem {
   id: number;
   q: string;
