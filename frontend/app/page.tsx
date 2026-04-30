@@ -13,7 +13,6 @@ import type {
   EvaluationRow,
   EvaluationRowStatus,
   DocumentHistoryItem,
-  DocumentHistoryStatus,
 } from '../src/types';
 
 const DOCUMENT_EXTENSIONS = ['.pdf', '.csv', '.xlsx'];
@@ -114,11 +113,25 @@ export default function RagEvaluationPage() {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   };
 
+  const getNextHistoryStatusAfterResultRemove = (): DocumentHistoryItem['status'] => {
+    if (hasDownloadedQuestionSet) return 'downloaded';
+    if (generatedSummary) return 'generated';
+    if (uploadedFile) return 'uploaded';
+    return 'uploaded';
+  };
+
   const updateActiveDocumentHistory = (
     patch: Partial<
       Pick<
         DocumentHistoryItem,
-        'questionCount' | 'status' | 'generatedSummary' | 'generatedQuestions' | 'hasDownloadedQuestionSet'
+        | 'questionCount'
+        | 'status'
+        | 'generatedSummary'
+        | 'generatedQuestions'
+        | 'hasDownloadedQuestionSet'
+        | 'resultFile'
+        | 'evaluationSummary'
+        | 'evaluationRows'
       >
     >,
   ) => {
@@ -142,6 +155,7 @@ export default function RagEvaluationPage() {
 
   const applyDocumentFile = (file: File) => {
     const nextId = createHistoryId();
+
     const nextHistory: DocumentHistoryItem = {
       id: nextId,
       file,
@@ -159,6 +173,9 @@ export default function RagEvaluationPage() {
       generatedSummary: null,
       generatedQuestions: [],
       hasDownloadedQuestionSet: false,
+      resultFile: null,
+      evaluationSummary: null,
+      evaluationRows: [],
     };
 
     setUploadedFile(file);
@@ -171,10 +188,6 @@ export default function RagEvaluationPage() {
     setDocumentHistories((prev) => [nextHistory, ...prev].slice(0, 12));
   };
 
-  const updateDocumentStatus = (status: DocumentHistoryStatus) => {
-    updateActiveDocumentHistory({ status });
-  };
-
   const handleSelectDocumentHistory = (id: string) => {
     const selected = documentHistories.find((item) => item.id === id);
     if (!selected) return;
@@ -184,9 +197,15 @@ export default function RagEvaluationPage() {
     setGeneratedSummary(selected.generatedSummary);
     setGeneratedQuestions(selected.generatedQuestions);
     setHasDownloadedQuestionSet(selected.hasDownloadedQuestionSet);
-    setResultFile(null);
-    resetEvaluationData();
-    setActiveMenu('테스트셋 생성');
+    setResultFile(selected.resultFile);
+    setEvaluationSummary(selected.evaluationSummary);
+    setEvaluationRows(selected.evaluationRows);
+
+    if (selected.status === 'evaluated') {
+      setActiveMenu('성능 평가');
+    } else {
+      setActiveMenu('테스트셋 생성');
+    }
 
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (resultFileInputRef.current) resultFileInputRef.current.value = '';
@@ -210,6 +229,12 @@ export default function RagEvaluationPage() {
     if (validateFile(file, RESULT_EXTENSIONS)) {
       setResultFile(file);
       resetEvaluationData();
+
+      updateActiveDocumentHistory({
+        resultFile: file,
+        evaluationSummary: null,
+        evaluationRows: [],
+      });
     } else if (resultFileInputRef.current) {
       resultFileInputRef.current.value = '';
     }
@@ -257,18 +282,36 @@ export default function RagEvaluationPage() {
     if (validateFile(file, RESULT_EXTENSIONS)) {
       setResultFile(file);
       resetEvaluationData();
+
+      updateActiveDocumentHistory({
+        resultFile: file,
+        evaluationSummary: null,
+        evaluationRows: [],
+      });
     }
   };
 
   const handleRemoveFile = () => {
     setUploadedFile(null);
+    setResultFile(null);
     resetGeneratedData();
+    resetEvaluationData();
+
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (resultFileInputRef.current) resultFileInputRef.current.value = '';
   };
 
   const handleRemoveResultFile = () => {
     setResultFile(null);
     resetEvaluationData();
+
+    updateActiveDocumentHistory({
+      status: getNextHistoryStatusAfterResultRemove(),
+      resultFile: null,
+      evaluationSummary: null,
+      evaluationRows: [],
+    });
+
     if (resultFileInputRef.current) resultFileInputRef.current.value = '';
   };
 
@@ -296,6 +339,8 @@ export default function RagEvaluationPage() {
       setGeneratedQuestions(questions);
       setGeneratedSummary(nextSummary);
       setHasDownloadedQuestionSet(false);
+      setResultFile(null);
+      resetEvaluationData();
 
       updateActiveDocumentHistory({
         questionCount: questions.length,
@@ -303,6 +348,9 @@ export default function RagEvaluationPage() {
         generatedSummary: nextSummary,
         generatedQuestions: questions,
         hasDownloadedQuestionSet: false,
+        resultFile: null,
+        evaluationSummary: null,
+        evaluationRows: [],
       });
     } finally {
       setIsGenerating(false);
@@ -328,57 +376,64 @@ export default function RagEvaluationPage() {
           question: '문서의 핵심 목적 또는 주제를 한 문장으로 설명해 주세요.',
           answer:
             '이 문서는 기준 문서를 바탕으로 질문을 생성하고, 사용자 결과 제출을 통해 챗봇 답변 품질을 평가하는 흐름을 설명합니다.',
-          questionFitScore: 0.93,
-          accuracyScore: 0.9,
-          documentAlignmentScore: 0.91,
-          overallScore: 0.91,
-          status: getRowStatus(0.91),
+          answerRelevancyScore: 0.87,
+          answerAccuracyScore: 0.84,
+          answerSimilarityScore: 0.83,
+          overallScore: 0.85,
+          status: getRowStatus(0.85),
         },
         {
           id: 2,
           question: '문서에서 가장 중요한 원칙 또는 단계를 설명해 주세요.',
           answer: '질문 생성 후 사용자 챗봇에서 실행한 결과를 다시 제출받아 평가하는 단계가 핵심입니다.',
-          questionFitScore: 0.86,
-          accuracyScore: 0.84,
-          documentAlignmentScore: 0.82,
-          overallScore: 0.84,
-          status: getRowStatus(0.84),
+          answerRelevancyScore: 0.89,
+          answerAccuracyScore: 0.85,
+          answerSimilarityScore: 0.84,
+          overallScore: 0.86,
+          status: getRowStatus(0.86),
         },
         {
           id: 3,
           question: '결과 제출 파일에는 어떤 항목이 포함되어야 하나요?',
           answer: 'question과 answer 컬럼이 포함된 CSV 파일을 제출하면 됩니다.',
-          questionFitScore: 0.9,
-          accuracyScore: 0.88,
-          documentAlignmentScore: 0.86,
-          overallScore: 0.88,
-          status: getRowStatus(0.88),
+          answerRelevancyScore: 0.86,
+          answerAccuracyScore: 0.83,
+          answerSimilarityScore: 0.82,
+          overallScore: 0.84,
+          status: getRowStatus(0.84),
         },
         {
           id: 4,
           question: '이 시스템은 무엇을 중심으로 평가하나요?',
           answer: '검색 성능을 직접 평가하기보다 답변이 질문에 맞는지와 문서 내용과 일치하는지를 중심으로 봅니다.',
-          questionFitScore: 0.79,
-          accuracyScore: 0.76,
-          documentAlignmentScore: 0.74,
-          overallScore: 0.76,
-          status: getRowStatus(0.76),
+          answerRelevancyScore: 0.86,
+          answerAccuracyScore: 0.84,
+          answerSimilarityScore: 0.83,
+          overallScore: 0.84,
+          status: getRowStatus(0.84),
         },
       ];
 
       const average = (values: number[]) =>
         values.reduce((sum, value) => sum + value, 0) / values.length;
 
-      setEvaluationRows(rows);
-      setEvaluationSummary({
+      const nextEvaluationSummary: EvaluationSummary = {
         overallScore: average(rows.map((row) => row.overallScore)),
-        questionFitScore: average(rows.map((row) => row.questionFitScore)),
-        accuracyScore: average(rows.map((row) => row.accuracyScore)),
-        documentAlignmentScore: average(rows.map((row) => row.documentAlignmentScore)),
+        answerRelevancyScore: average(rows.map((row) => row.answerRelevancyScore)),
+        answerAccuracyScore: average(rows.map((row) => row.answerAccuracyScore)),
+        answerSimilarityScore: average(rows.map((row) => row.answerSimilarityScore)),
         evaluatedCount: rows.length,
-      });
+      };
 
-      updateDocumentStatus('evaluated');
+      setEvaluationRows(rows);
+      setEvaluationSummary(nextEvaluationSummary);
+
+      updateActiveDocumentHistory({
+        status: 'evaluated',
+        resultFile,
+        evaluationSummary: nextEvaluationSummary,
+        evaluationRows: rows,
+      });
     } finally {
       setIsEvaluating(false);
     }

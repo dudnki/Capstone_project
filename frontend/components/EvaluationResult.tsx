@@ -66,16 +66,16 @@ export default function EvaluationResult({
 
   const metricPreviewCards = [
     {
-      title: '질문 적합도',
-      description: '답변이 질문 의도에 맞게 작성되었는지 확인합니다.',
+      title: '답변 관련성',
+      description: '답변이 질문 의도와 얼마나 관련성 있게 작성되었는지 확인합니다.',
     },
     {
       title: '답변 정확도',
-      description: '답변 내용이 기준 문서와 비교해 정확한지 확인합니다.',
+      description: '답변 내용이 기준 문서와 비교해 얼마나 정확한지 확인합니다.',
     },
     {
-      title: '문서 일치도',
-      description: '답변이 기준 문서 내용에 기반했는지 확인합니다.',
+      title: '답변 유사도',
+      description: '답변이 기준 정답 또는 문서 기반 답변과 얼마나 유사한지 확인합니다.',
     },
   ];
 
@@ -143,7 +143,7 @@ export default function EvaluationResult({
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-500">
-                질문 파일을 수행한 결과를 CSV 파일로 업로드하면 답변 품질을 평가할 수 있습니다.
+                질문 파일을 수행한 결과를 CSV 파일로 업로드하면 답변 관련성, 정확도, 유사도를 평가할 수 있습니다.
               </p>
             </div>
 
@@ -226,7 +226,7 @@ export default function EvaluationResult({
                 {resultFile ? '평가 실행 준비가 완료되었습니다' : '결과 CSV를 업로드하면 상단에서 평가를 실행할 수 있습니다'}
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                question, answer 기준으로 질문 적합도와 답변 정확도를 함께 확인합니다.
+                종합 점수와 함께 답변 관련성, 답변 정확도, 답변 유사도를 확인합니다.
               </p>
             </div>
 
@@ -287,27 +287,27 @@ export default function EvaluationResult({
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">질문 적합도</p>
+            <p className="text-xs text-slate-500">답변 관련성</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-              {formatScore(evaluationSummary.questionFitScore)}
+              {formatScore(evaluationSummary.answerRelevancyScore)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변이 질문 의도에 맞는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">답변이 질문 의도와 얼마나 관련성 있는지 평가</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
             <p className="text-xs text-slate-500">답변 정확도</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-              {formatScore(evaluationSummary.accuracyScore)}
+              {formatScore(evaluationSummary.answerAccuracyScore)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변 내용이 기준 문서와 비교해 정확한지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">답변 내용이 기준 문서와 비교해 얼마나 정확한지 평가</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">문서 일치도</p>
+            <p className="text-xs text-slate-500">답변 유사도</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-              {formatScore(evaluationSummary.documentAlignmentScore)}
+              {formatScore(evaluationSummary.answerSimilarityScore)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변이 기준 문서 내용에 기반했는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">답변이 기준 정답 또는 문서 기반 답변과 얼마나 유사한지 평가</p>
           </div>
         </section>
       )}
@@ -380,19 +380,21 @@ export default function EvaluationResult({
                         <p className="mt-1 text-sm font-semibold text-slate-900">{formatScore(row.overallScore)}</p>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <p className="text-[11px] text-slate-500">질문 적합도</p>
+                        <p className="text-[11px] text-slate-500">답변 관련성</p>
                         <p className="mt-1 text-sm font-semibold text-slate-900">
-                          {formatScore(row.questionFitScore)}
+                          {formatScore(row.answerRelevancyScore)}
                         </p>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <p className="text-[11px] text-slate-500">정확도</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">{formatScore(row.accuracyScore)}</p>
+                        <p className="text-[11px] text-slate-500">답변 정확도</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">
+                          {formatScore(row.answerAccuracyScore)}
+                        </p>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <p className="text-[11px] text-slate-500">문서 일치도</p>
+                        <p className="text-[11px] text-slate-500">답변 유사도</p>
                         <p className="mt-1 text-sm font-semibold text-slate-900">
-                          {formatScore(row.documentAlignmentScore)}
+                          {formatScore(row.answerSimilarityScore)}
                         </p>
                       </div>
                     </div>

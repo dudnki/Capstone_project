@@ -13,9 +13,9 @@ export type GeneratedSummary = {
 
 export type EvaluationSummary = {
   overallScore: number;
-  questionFitScore: number;
-  accuracyScore: number;
-  documentAlignmentScore: number;
+  answerRelevancyScore: number;
+  answerAccuracyScore: number;
+  answerSimilarityScore: number;
   evaluatedCount: number;
 };
 
@@ -25,9 +25,9 @@ export type EvaluationRow = {
   id: number;
   question: string;
   answer: string;
-  questionFitScore: number;
-  accuracyScore: number;
-  documentAlignmentScore: number;
+  answerRelevancyScore: number;
+  answerAccuracyScore: number;
+  answerSimilarityScore: number;
   overallScore: number;
   status: EvaluationRowStatus;
 };
@@ -46,6 +46,9 @@ export type DocumentHistoryItem = {
   generatedSummary: GeneratedSummary | null;
   generatedQuestions: QuestionItem[];
   hasDownloadedQuestionSet: boolean;
+  resultFile: File | null;
+  evaluationSummary: EvaluationSummary | null;
+  evaluationRows: EvaluationRow[];
 };
 
 export interface EvaluationItem {
