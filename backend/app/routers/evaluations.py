@@ -9,7 +9,8 @@ router = APIRouter()
 
 class UserAnswer(BaseModel):
     qa_id: str
-    answer: str
+    user_answer: str  # ← 이렇게 변경
+
 
 class EvaluationRequest(BaseModel):
     document_id: str
@@ -36,11 +37,12 @@ async def submit_evaluation(req: EvaluationRequest):
             # 2. 새로운 함수로 평가 실행 (사용자 답변 반영)
             # context, question, ground_truth는 DB에 저장된 것을 사용
             scores = evaluate_qa_quality(
-                context=qa_item["context"],
-                question=qa_item["question"],
-                ground_truth=qa_item["ground_truth"],
-                user_answer=user_ans.answer  # 사용자가 입력한 답변 전달
-            )
+    context=qa_item["context"],
+    question=qa_item["question"],
+    ground_truth=qa_item["ground_truth"],
+    user_answer=user_ans.user_answer  # ← 이렇게 변경
+)
+
             
             # 3. 결과 리스트에 담기
             results.append({

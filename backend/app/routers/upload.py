@@ -24,11 +24,14 @@ async def upload_file(file: UploadFile = File(...)):
             file_options={"content-type": file.content_type, "upsert": "true"}
         )
 
+        # app/routers/upload.py (응답 부분 수정)
+
         return {
             "status": "success",
             "message": "파일이 Supabase에 성공적으로 업로드되었습니다.",
             "original_filename": original_filename,
-            "saved_filename": safe_filename
+            "saved_filename": safe_filename,
+            "path": safe_filename  # 프론트엔드의 uploadData.path를 위해 추가
         }
 
     except Exception as e:

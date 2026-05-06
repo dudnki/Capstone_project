@@ -21,6 +21,11 @@ interface DatasetManagerProps {
   onMoveToEvaluation: () => void;
   onUpdateQuestion: (id: number, text: string) => void;
   onRemoveQuestion: (id: number) => void;
+  userAnswers: Record<string, string>;
+  onAnswerChange: (questionId: string, answer: string) => void;
+  isSubmittingAnswers: boolean;
+  onSubmitAnswers: () => void;
+  canSubmitAnswers: boolean;
 }
 
 const DOCUMENT_EXTENSIONS = ['PDF', 'csv', 'XLSX'];
@@ -44,8 +49,14 @@ export default function DatasetManager({
   onMoveToEvaluation,
   onUpdateQuestion,
   onRemoveQuestion,
+  userAnswers,
+  onAnswerChange,
+  isSubmittingAnswers,
+  onSubmitAnswers,
+  canSubmitAnswers,
 }: DatasetManagerProps) {
   const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
+  const [showAnswerSection, setShowAnswerSection] = useState(false);
 
   const hasQuestions = generatedQuestions.length > 0;
 
@@ -75,6 +86,8 @@ export default function DatasetManager({
       description: '생성된 질문을 수정하거나 삭제한 뒤 CSV 파일로 내려받습니다.',
     },
   ];
+
+  const answeredCount = Object.values(userAnswers).filter((answer) => answer.trim().length > 0).length;
 
   return (
     <div className="flex h-full flex-col gap-5">
@@ -276,64 +289,156 @@ export default function DatasetManager({
       )}
 
       {hasQuestions && (
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-          <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">질문 검토</p>
-              <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">질문 검토 및 수정</h3>
+        <>
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+            <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">질문 검토</p>
+                <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">질문 검토 및 수정</h3>
+              </div>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                {generatedQuestions.length}개 질문
+              </span>
             </div>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              {generatedQuestions.length}개 질문
-            </span>
+
+            <div className="divide-y divide-slate-100">
+              {generatedQuestions.map((question, index) => {
+                const isEditing = editingQuestionId === question.id;
+
+                return (
+                  <div key={question.id} className="px-6 py-4">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="flex min-w-0 flex-1 gap-3">
+                        <span className="mt-0.5 inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-50 px-2 text-xs font-bold text-blue-700">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          {isEditing ? (
+                            <textarea
+                              value={question.text}
+                              onChange={(e) => onUpdateQuestion(question.id, e.target.value)}
+                              rows={3}
+                              className="w-full rounded-xl border border-blue-200 bg-blue-50/40 px-3 py-2.5 text-sm leading-6 text-slate-700 outline-none focus:border-blue-400"
+                            />
+                          ) : (
+                            <p className="text-sm leading-7 text-slate-700">{question.text}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-2 pl-10 xl:pl-0">
+                        <button
+                          type="button"
+                          onClick={() => setEditingQuestionId(isEditing ? null : question.id)}
+                          className="rounded-xl border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
+                        >
+                          {isEditing ? '완료' : '수정'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveQuestion(question.id)}
+                          className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowAnswerSection(!showAnswerSection)}
+              className="rounded-xl border border-blue-300 bg-blue-50 px-6 py-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+            >
+              {showAnswerSection ? '답변 입력 숨기기' : '답변 직접 입력하기'}
+            </button>
           </div>
 
-          <div className="divide-y divide-slate-100">
-            {generatedQuestions.map((question, index) => {
-              const isEditing = editingQuestionId === question.id;
+          {showAnswerSection && (
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+              <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-green-600">답변 입력</p>
+                  <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">사용자 답변 입력</h3>
+                </div>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                  {answeredCount} / {generatedQuestions.length}개 입력됨
+                </span>
+              </div>
 
-              return (
-                <div key={question.id} className="px-6 py-4">
-                  <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="flex min-w-0 flex-1 gap-3">
+              <div className="divide-y divide-slate-100 p-6">
+                {generatedQuestions.map((question, index) => (
+                  <div key={question.id} className="mb-6 flex flex-col gap-3 last:mb-0 pb-6 last:pb-0">
+                    <div className="flex gap-3">
                       <span className="mt-0.5 inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-blue-50 px-2 text-xs font-bold text-blue-700">
-                        {index + 1}
+                        Q{index + 1}
                       </span>
                       <div className="min-w-0 flex-1">
-                        {isEditing ? (
-                          <textarea
-                            value={question.text}
-                            onChange={(e) => onUpdateQuestion(question.id, e.target.value)}
-                            rows={3}
-                            className="w-full rounded-xl border border-blue-200 bg-blue-50/40 px-3 py-2.5 text-sm leading-6 text-slate-700 outline-none focus:border-blue-400"
-                          />
-                        ) : (
-                          <p className="text-sm leading-7 text-slate-700">{question.text}</p>
-                        )}
+                        <p className="text-sm font-semibold text-slate-900">질문</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-700">{question.text}</p>
                       </div>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-2 pl-10 xl:pl-0">
-                      <button
-                        type="button"
-                        onClick={() => setEditingQuestionId(isEditing ? null : question.id)}
-                        className="rounded-xl border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
-                      >
-                        {isEditing ? '완료' : '수정'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onRemoveQuestion(question.id)}
-                        className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
-                      >
-                        삭제
-                      </button>
+                    <div className="ml-10">
+                      <label className="block text-sm font-semibold text-slate-900 mb-2">
+                        답변 입력
+                      </label>
+                      <textarea
+                        value={userAnswers[String(question.id)] || ''}
+                        onChange={(e) => {
+                          console.log('[DatasetManager] 답변 변경:', {
+                            questionId: String(question.id),
+                            value: e.target.value,
+                            currentUserAnswers: userAnswers,
+                          });
+                          onAnswerChange(String(question.id), e.target.value);
+                        }}
+                        placeholder="이 질문에 대한 답변을 입력하세요..."
+                        rows={3}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-700 placeholder-slate-400 outline-none focus:border-green-400 focus:ring-1 focus:ring-green-200"
+                      />
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+                ))}
+              </div>
+
+              <div className="border-t border-slate-100 px-6 py-5 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    console.log('========== 제출 버튼 클릭 ==========');
+                    console.log('[DEBUG] canSubmitAnswers:', canSubmitAnswers);
+                    console.log('[DEBUG] isSubmittingAnswers:', isSubmittingAnswers);
+                    console.log('[DEBUG] userAnswers:', userAnswers);
+                    console.log('[DEBUG] generatedQuestions.length:', generatedQuestions.length);
+                    console.log('[DEBUG] answeredCount:', answeredCount);
+                    console.log('[DEBUG] onSubmitAnswers는 함수인가?', typeof onSubmitAnswers === 'function');
+
+                    if (typeof onSubmitAnswers !== 'function') {
+                      console.error('[ERROR] onSubmitAnswers가 함수가 아닙니다!');
+                      return;
+                    }
+
+                    onSubmitAnswers();
+                  }}
+                  disabled={!canSubmitAnswers || isSubmittingAnswers}
+                  className={`rounded-xl px-6 py-3 text-sm font-semibold transition-colors ${
+                    canSubmitAnswers && !isSubmittingAnswers
+                      ? 'bg-green-600 text-white shadow-[0_10px_24px_rgba(34,197,94,0.18)] hover:bg-green-700'
+                      : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  {isSubmittingAnswers ? '제출 중...' : '답변 제출 및 평가'}
+                </button>
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );

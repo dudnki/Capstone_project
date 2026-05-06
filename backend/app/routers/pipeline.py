@@ -1,7 +1,7 @@
 import os
 import json
 import fitz
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Form  # ← Form 추가!
 from pydantic import BaseModel
 from groq import Groq
 from app.services.supabase_client import supabase_client 
@@ -10,6 +10,8 @@ from app.services.ragas_eval import evaluate_qa_quality
 router = APIRouter()
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY)
+
+# ... 나머지 코드는 동일
 
 DTYPE_STYLES = {
     "pdf": {"color": "#b91c1c", "bg": "#fef2f2"},
@@ -40,24 +42,33 @@ def generate_qa_with_groq(context: str):
     )
     return completion.choices[0].message.content
 
-@router.post("/run")
-async def run_pipeline(req: PipelineRequest):
+@router.post("/pipeline/run")  # ← 이렇게 수정
+async def run_pipeline(
+    saved_filename: str = Form(...),
+    original_filename: str = Form(...)
+):
+    # 나머지 코드는 동일
     try:
-        file_bytes = supabase_client.storage.from_("documents").download(req.saved_filename)
-        if not file_bytes: raise HTTPException(status_code=404, detail="파일 없음")
+        # ✅ req.saved_filename → saved_filename 변경
+        file_bytes = supabase_client.storage.from_("documents").download(saved_filename)
+        if not file_bytes:
+            raise HTTPException(status_code=404, detail="파일 없음")
 
-        ext = req.original_filename.rsplit(".", 1)[-1].lower()
+        # ✅ req.original_filename → original_filename 변경
+        ext = original_filename.rsplit(".", 1)[-1].lower()
         extracted_text = ""
+        
         if ext == "pdf":
             doc = fitz.open(stream=file_bytes, filetype="pdf")
-            for page in doc: extracted_text += page.get_text()
+            for page in doc:
+                extracted_text += page.get_text()
         else:
             extracted_text = file_bytes.decode("utf-8")
 
         # Document 기록
         doc_insert = supabase_client.table("documents").insert({
             "content": extracted_text[:5000],
-            "original_filename": req.original_filename,
+            "original_filename": original_filename,  # ✅ req. 제거
             "status": "처리중"
         }).execute()
         document_id = doc_insert.data[0]["id"]
@@ -70,7 +81,6 @@ async def run_pipeline(req: PipelineRequest):
             qa_data = clean_and_parse_json(raw_res)
 
             if qa_data and "question" in qa_data:
-                # ⭐ 점수 계산 (에러 발생 시 내부적으로 0.0 반환하도록 보강됨)
                 score_data = evaluate_qa_quality(chunk, qa_data["question"], qa_data["answer"])
 
                 base_insert = {
@@ -108,19 +118,24 @@ async def run_pipeline(req: PipelineRequest):
         final_results = []
         for i, qa in enumerate(qa_pairs, start=1):
             s = qa["score_data"]
-            # 딕셔너리 안전 접근으로 에러 방지
             scores = [s.get(k, 0.0) for k in ["faithfulness", "answer_relevancy", "answer_correctness", "answer_similarity"]]
             avg_score = round(sum(scores) / len(scores), 2)
 
             final_results.append({
-                "index": i, "qa_uuid": qa.get("db_id"), "document_uuid": document_id,
-                "q": qa["question"], "doc": req.original_filename, "dtype": ext,
-                "color": style["color"], "bg": style["bg"], "answer": qa["answer"],
+                "index": i, 
+                "qa_uuid": qa.get("db_id"), 
+                "document_uuid": document_id,
+                "q": qa["question"], 
+                "doc": original_filename,  # ✅ req. 제거
+                "dtype": ext,
+                "color": style["color"], 
+                "bg": style["bg"], 
+                "answer": qa["answer"],
                 "score": avg_score,
                 "faithfulness": round(s.get("faithfulness", 0.0), 2),
                 "answer_relevancy": round(s.get("answer_relevancy", 0.0), 2),
                 "answer_correctness": round(s.get("answer_correctness", 0.0), 2),
-                "answer_similarity": round(s.get("answer_similarity", 2), 2)
+                "answer_similarity": round(s.get("answer_similarity", 0.0), 2)  # ✅ 2 → 0.0
             })
         return final_results
 

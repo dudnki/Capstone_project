@@ -1,17 +1,14 @@
-
 # C:\Users\65car\capston_project1\Capstone_project\backend\app\main.py
+
 import sys
 import os
-print(f"현재 서버 파이썬 경로: {sys.executable}")
-print(f"현재 서버 환경 변수(PATH): {os.environ.get('PATH')}")
-
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import upload, pipeline, evaluations
 
 app = FastAPI(title="RAG Evaluation API")
 
-# 1. 프론트엔드 통신 허용 (CORS)
+# 1. CORS 설정 (단 한 번만 설정!)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 2. 라우터 조립 (각 기능이 /api/... 경로로 자동 매핑)
+# 2. 라우터 조립
 app.include_router(upload.router, prefix="/api", tags=["Upload API"])
 app.include_router(pipeline.router, prefix="/api", tags=["Pipeline API"])
 app.include_router(evaluations.router, prefix="/api", tags=["Evaluations API"])
@@ -29,3 +26,5 @@ app.include_router(evaluations.router, prefix="/api", tags=["Evaluations API"])
 @app.get("/")
 def read_root():
     return {"message": "RAG Evaluation Backend is running!"}
+
+
