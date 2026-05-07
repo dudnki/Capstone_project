@@ -1,7 +1,6 @@
 import os
 import uuid
 from fastapi import APIRouter, File, UploadFile, HTTPException
-from app.services.supabase_client import supabase_client
 
 router = APIRouter()
 
@@ -28,7 +27,7 @@ async def upload_file(file: UploadFile = File(...)):
 
         return {
             "status": "success",
-            "message": "파일이 Supabase에 성공적으로 업로드되었습니다.",
+            "message": "파일이 로컬 폴더에 성공적으로 저장되었습니다.",
             "original_filename": original_filename,
             "saved_filename": safe_filename,
             "path": safe_filename  # 프론트엔드의 uploadData.path를 위해 추가

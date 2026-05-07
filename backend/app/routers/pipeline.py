@@ -3,6 +3,7 @@ import json
 import fitz
 from fastapi import APIRouter, HTTPException, Form  # ← Form 추가!
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from groq import Groq
 from app.services.supabase_client import supabase_client 
 from app.services.ragas_eval import evaluate_qa_quality
