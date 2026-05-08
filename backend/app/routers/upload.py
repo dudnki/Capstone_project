@@ -1,58 +1,40 @@
 import os
 import uuid
 from fastapi import APIRouter, File, UploadFile, HTTPException
-from app.services.supabase_client import supabase_client
 
 router = APIRouter()
 
-<<<<<<< HEAD
+# 1. 파일이 저장될 로컬 폴더 경로 설정
+# (backend 폴더 안에 'uploaded_pdf'라는 폴더가 자동으로 생깁니다)
+UPLOAD_DIR = "uploaded_pdf"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-=======
-# 이미 main.py에서 /api 접두사를 붙였으므로 여기서는 /upload만 정의합니다.
->>>>>>> feature/rag-eval-fix
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
+        # 파일 내용 읽기
         file_contents = await file.read()
         original_filename = file.filename
 
+        # UUID 기반의 안전한 파일명 생성 (중복 방지)[cite: 3]
         _, ext = os.path.splitext(original_filename)
-<<<<<<< HEAD
         safe_filename = f"{uuid.uuid4()}{ext}"
 
-        supabase_client.storage.from_("documents").upload(
-            safe_filename,
-            file_contents,
-            {"content-type": file.content_type, "upsert": "true"}
-        )
+        # 2. 로컬 폴더에 파일 저장하기 (수퍼베이스 대체)
+        file_path = os.path.join(UPLOAD_DIR, safe_filename)
+        with open(file_path, "wb") as f:
+            f.write(file_contents)
 
-=======
-        # UUID 기반의 안전한 파일명 생성 (중복 방지)
-        safe_filename = f"{uuid.uuid4()}{ext}"
-
-        # 1. Supabase Storage 'documents' 버킷에 업로드
-        # content-type을 명시하면 브라우저나 Supabase 대시보드에서 파일을 확인할 때 더 정확하게 표시됩니다.
-        res = supabase_client.storage.from_("documents").upload(
-            path=safe_filename, 
-            file=file_contents, 
-            file_options={"content-type": file.content_type, "upsert": "true"}
-        )
-
-        # 2. 업로드 완료 후 정보 반환
->>>>>>> feature/rag-eval-fix
+        # 3. 업로드 완료 후 정보 반환
         return {
             "status": "success",
-            "message": "파일이 Supabase에 성공적으로 업로드되었습니다.",
+            "message": "파일이 로컬 폴더에 성공적으로 저장되었습니다.",
             "original_filename": original_filename,
-            "saved_filename": safe_filename
+            "saved_filename": safe_filename,
+            "file_path": file_path
         }
 
     except Exception as e:
-<<<<<<< HEAD
+        # 에러 발생 시 서버 터미널에 상세 정보 출력 (디버깅용)[cite: 3]
         print(f"Upload Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"업로드 실패: {str(e)}")
-=======
-        # 에러 발생 시 서버 터미널에 상세 정보 출력 (디버깅용)
-        print(f"Upload Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"업로드 실패: {str(e)}")
->>>>>>> feature/rag-eval-fix
+        raise HTTPException(status_code=500, detail=f"로컬 업로드 실패: {str(e)}")
