@@ -140,12 +140,13 @@ export default function RagEvaluationPage() {
   const mainScrollRef = useRef<HTMLElement | null>(null);
 
   const canGenerateQuestions = Boolean(uploadedFile);
-  const canRunEvaluation = Boolean(resultFile);
+  const canRunEvaluation = Boolean(resultFile && generatedSummary);
 
   function getCurrentStep() {
     if (!uploadedFile) return 1;
     if (!generatedSummary) return 2;
-    return 3;
+    if (!hasDownloadedQuestionSet) return 3;
+    return 4;
   }
 
   const currentStepValue = getCurrentStep();
@@ -160,8 +161,8 @@ export default function RagEvaluationPage() {
 
   const headerStepLabel = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
-      const labels = ['1단계 PDF 업로드', '2단계 질문 생성', '3단계 질문 다운로드'];
-      return labels[Math.min(currentStepValue, 3) - 1];
+      const labels = ['1단계 PDF 업로드', '2단계 질문 생성', '3단계 질문 검토/수정', '4단계 질문 다운로드'];
+      return labels[Math.min(currentStepValue, 4) - 1];
     }
 
     return evaluationSummary ? '평가 결과 확인' : '결과 CSV 업로드';
@@ -187,6 +188,14 @@ export default function RagEvaluationPage() {
         ? '질문 세트 준비됨'
         : '질문 세트 필요';
   }, [activeMenu, generatedSummary, evaluationSummary, hasDownloadedQuestionSet]);
+
+  const headerActionLabel = useMemo(() => {
+    if (activeMenu === '테스트셋 생성') {
+      return generatedQuestions.length > 0 ? '질문 CSV 다운로드' : '질문 생성하기';
+    }
+
+    return '평가 실행하기';
+  }, [activeMenu, generatedQuestions.length]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -647,6 +656,43 @@ export default function RagEvaluationPage() {
     });
   };
 
+  const handleQuestionTextChange = (questionId: number, nextText: string) => {
+    const nextQuestionsSnapshot = generatedQuestions.map((question) =>
+      question.id === questionId ? { ...question, text: nextText } : question,
+    );
+
+    setGeneratedQuestions(nextQuestionsSnapshot);
+
+    setHasDownloadedQuestionSet(false);
+
+    updateActiveDocumentHistory({
+      status: 'generated',
+      generatedQuestions: nextQuestionsSnapshot,
+      hasDownloadedQuestionSet: false,
+    });
+
+    if (!activeDocumentId) return;
+
+    setBackendMetaByHistoryId((prev) => {
+      const currentMeta = prev[activeDocumentId];
+      if (!currentMeta) return prev;
+
+      const qaId = currentMeta.qaIdByQuestionId[questionId];
+      if (!qaId) return prev;
+
+      return {
+        ...prev,
+        [activeDocumentId]: {
+          ...currentMeta,
+          questionByQaId: {
+            ...currentMeta.questionByQaId,
+            [qaId]: nextText,
+          },
+        },
+      };
+    });
+  };
+
   const buildUserAnswersFromCsv = async () => {
     if (!resultFile) return [];
 
@@ -806,6 +852,11 @@ export default function RagEvaluationPage() {
 
   const handleActionClick = async () => {
     if (activeMenu === '테스트셋 생성') {
+      if (generatedQuestions.length > 0) {
+        handleDownloadQuestions();
+        return;
+      }
+
       await handleGenerateQuestions();
       return;
     }
@@ -839,6 +890,7 @@ export default function RagEvaluationPage() {
         currentStepLabel={headerStepLabel}
         primaryStatus={headerPrimaryStatus}
         secondaryStatus={headerSecondaryStatus}
+        actionLabel={headerActionLabel}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -857,7 +909,7 @@ export default function RagEvaluationPage() {
           className="min-w-0 flex-1 overflow-y-scroll"
           style={{ scrollbarGutter: 'stable' }}
         >
-          <div className="flex h-full w-full flex-col px-4 py-4 lg:px-6 lg:py-6 2xl:px-8">
+          <div className="flex h-full w-full flex-col px-5 py-5 lg:px-8 lg:py-7 2xl:px-10">
             <div className="flex min-h-0 flex-1 flex-col">
               {activeMenu === '테스트셋 생성' ? (
                 <DatasetManager
@@ -875,6 +927,7 @@ export default function RagEvaluationPage() {
                   handleFileChange={handleFileChange}
                   formatFileSize={formatFileSize}
                   onRemoveFile={handleRemoveFile}
+                  onQuestionTextChange={handleQuestionTextChange}
                   onDownloadQuestions={handleDownloadQuestions}
                   onMoveToEvaluation={() => setActiveMenu('성능 평가')}
                 />
@@ -892,7 +945,6 @@ export default function RagEvaluationPage() {
                   handleResultDrop={handleResultDrop}
                   handleResultFileChange={handleResultFileChange}
                   onRemoveResultFile={handleRemoveResultFile}
-                  onRunEvaluation={handleRunEvaluation}
                   formatFileSize={formatFileSize}
                   getScrollTop={getMainScrollTop}
                   restoreScrollTop={restoreMainScrollTop}

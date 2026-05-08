@@ -10,6 +10,8 @@ interface HeaderProps {
   currentStepLabel?: string;
   primaryStatus?: string;
   secondaryStatus?: string;
+  actionLabel?: string;
+  loadingLabel?: string;
 }
 
 export default function Header({
@@ -22,12 +24,14 @@ export default function Header({
   currentStepLabel,
   primaryStatus,
   secondaryStatus,
+  actionLabel,
+  loadingLabel,
 }: HeaderProps) {
   const isTestsetMenu = activeMenu === '테스트셋 생성';
   const isLoading = isTestsetMenu ? isGenerating : isEvaluating;
   const isDisabled = isLoading || isActionDisabled;
-  const buttonLabel = isTestsetMenu ? '질문 생성하기' : '평가 실행하기';
-  const loadingLabel = isTestsetMenu ? '질문 생성 중...' : '평가 실행 중...';
+  const buttonLabel = actionLabel ?? (isTestsetMenu ? '질문 생성하기' : '평가 실행하기');
+  const activeLoadingLabel = loadingLabel ?? (isTestsetMenu ? '질문 생성 중...' : '평가 실행 중...');
 
   return (
     <header className="relative z-[60] flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4 shadow-[0_1px_4px_rgba(15,23,42,0.04)] lg:px-6">
@@ -49,7 +53,7 @@ export default function Header({
 
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="text-sm font-bold tracking-tight text-slate-900">Pipeline Architect</div>
+            <div className="text-sm font-bold tracking-tight text-slate-900">RAG 평가 플랫폼</div>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
               {activeMenu}
             </span>
@@ -89,7 +93,7 @@ export default function Header({
         }`}
       >
         {!isDisabled && <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-200" />}
-        {isLoading ? loadingLabel : buttonLabel}
+        {isLoading ? activeLoadingLabel : buttonLabel}
       </button>
     </header>
   );

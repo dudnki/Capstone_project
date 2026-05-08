@@ -57,9 +57,9 @@ export default function Sidebar({
           setOpenMenuId(null);
           onStartNewEvaluation();
         }}
-        className="mb-5 flex w-full items-center gap-2 rounded-2xl border border-blue-200 bg-blue-600 px-3 py-3 text-left text-white shadow-[0_10px_24px_rgba(37,99,235,0.18)] transition-colors hover:bg-blue-700"
+        className="mb-5 flex w-full items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-3 text-left text-blue-700 transition-colors hover:bg-blue-100"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/15">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white">
           <svg
             width="16"
             height="16"
@@ -77,7 +77,7 @@ export default function Sidebar({
 
         <div className="min-w-0">
           <p className="text-sm font-bold">새 평가 시작</p>
-          <p className="mt-0.5 text-[11px] leading-4 text-blue-100">새 PDF로 평가 세션 생성</p>
+          <p className="mt-0.5 text-[11px] leading-4 text-blue-600">새 PDF로 평가 세션 생성</p>
         </div>
       </button>
 
