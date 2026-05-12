@@ -8,6 +8,9 @@ from groq import Groq
 
 # 🔥 우리가 새로 만든 로컬 DB 구조를 불러옵니다.
 from app.services.database import get_db, Document, QAEvaluation
+from dotenv import load_dotenv
+
+load_dotenv()  # .env 파일 로드
 
 router = APIRouter()
 

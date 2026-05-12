@@ -8,6 +8,9 @@ print(f"현재 서버 환경 변수(PATH): {os.environ.get('PATH')}")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import upload, pipeline, evaluations
+from dotenv import load_dotenv
+
+load_dotenv()  # .env 파일 로드
 
 app = FastAPI(title="RAG Evaluation API")
 
