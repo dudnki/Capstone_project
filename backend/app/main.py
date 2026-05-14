@@ -5,12 +5,12 @@ import os
 print(f"현재 서버 파이썬 경로: {sys.executable}")
 print(f"현재 서버 환경 변수(PATH): {os.environ.get('PATH')}")
 
+from dotenv import load_dotenv
+load_dotenv()  # .env 파일 로드 — 라우터/서비스 import 전에 먼저 실행되어야 함
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import upload, pipeline, evaluations
-from dotenv import load_dotenv
-
-load_dotenv()  # .env 파일 로드
 
 app = FastAPI(title="RAG Evaluation API")
 
