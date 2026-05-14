@@ -22,7 +22,7 @@ class FileSubmitRequest(BaseModel):
 # 1. 학생 답변 제출 및 채점 API
 # ─────────────────────────────────────────────────────────
 @router.post("/evaluations/submit")
-async def submit_student_answers(
+def submit_student_answers(
     req: FileSubmitRequest,
     db: Session = Depends(get_db),
 ):
@@ -208,7 +208,7 @@ async def submit_student_answers(
 # 2. 히스토리 목록 조회
 # ─────────────────────────────────────────────────────────
 @router.get("/evaluations")
-async def get_evaluations_list(db: Session = Depends(get_db)):
+def get_evaluations_list(db: Session = Depends(get_db)):
     try:
         docs = db.query(Document).order_by(Document.created_at.desc()).all()
         return {
@@ -231,7 +231,7 @@ async def get_evaluations_list(db: Session = Depends(get_db)):
 # 3. 특정 평가 상세 조회
 # ─────────────────────────────────────────────────────────
 @router.get("/evaluations/{document_id}")
-async def get_evaluation_detail(
+def get_evaluation_detail(
     document_id: str,
     db: Session = Depends(get_db),
 ):
