@@ -1,22 +1,16 @@
 import os
-import json
 import fitz  # PyMuPDF
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from groq import Groq
 
-# 🔥 우리가 새로 만든 로컬 DB 구조를 불러옵니다.
 from app.services.database import get_db, Document, QAEvaluation
+from app.services.geval_filter import generate_multiple_qa, filter_qa_by_geval
 from dotenv import load_dotenv
 
-load_dotenv()  # .env 파일 로드
+load_dotenv()
 
 router = APIRouter()
-
-# API Key 설정
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-groq_client = Groq(api_key=GROQ_API_KEY)
 
 DTYPE_STYLES = {
     "pdf": {"color": "#b91c1c", "bg": "#fef2f2"},
@@ -24,37 +18,14 @@ DTYPE_STYLES = {
     "md":  {"color": "#1d4ed8", "bg": "#eff6ff"},
 }
 
+# G-Eval 파이프라인 파라미터
+N_CANDIDATES = 5   # 청크당 생성할 Q&A 후보 수
+GEVAL_THRESHOLD = 0.70  # 최소 품질 점수 (0~1)
+TOP_K_PER_CHUNK = 2     # 청크당 최종 선택 수
+
 class PipelineRequest(BaseModel):
-    saved_filename: str    # 로컬 폴더에 저장된 파일명
-    original_filename: str # 원본 파일명
-
-def clean_and_parse_json(raw_content):
-    try:
-        # Groq 응답에서 마크다운 태그 제거 후 JSON 파싱
-        cleaned = raw_content.replace("```json", "").replace("```", "").strip()
-        return json.loads(cleaned)
-    except Exception:
-        return None
-
-def generate_qa_with_groq(context: str):
-    prompt = (
-        f"다음 문맥을 바탕으로 질문과 답변을 한 쌍의 JSON 형식으로 만들어줘. "
-        f"결과는 반드시 {{'question': '...', 'answer': '...'}} 형식이어야 해. \n\n[Context]: {context}"
-    )
-    completion = groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"}
-    )
-    return completion.choices[0].message.content
-
-# RAGAS 평가 함수 (팀원 분이 남겨둔 임시 로직 유지)
-def evaluate_qa_quality(context, question, ground_truth):
-    # 실제 RAGAS 로직 연결 전까지 임시 점수(Stub) 반환
-    return {
-        "faithfulness": 0.85,
-        "answer_relevancy": 0.82
-    }
+    saved_filename: str
+    original_filename: str
 
 # 🔥 파일이 저장되어 있는 로컬 폴더 경로
 UPLOAD_DIR = "uploaded_pdf"
@@ -97,36 +68,60 @@ async def run_pipeline(req: PipelineRequest, db: Session = Depends(get_db)):
         chunk_size = 1000
         chunks = [extracted_text[i:i + chunk_size] for i in range(0, len(extracted_text), chunk_size)]
 
-        # 5. LLM Q&A 생성 및 실시간 평가 (테스트용 상위 3개 청크)
+        # 5. G-Eval 파이프라인: 다수 후보 생성 → 품질 필터링 → 고품질만 저장
         qa_pairs = []
-        for chunk in chunks[:3]:
-            raw_res = generate_qa_with_groq(chunk)
-            qa_data = clean_and_parse_json(raw_res)
+        for chunk_idx, chunk in enumerate(chunks[:3]):
+            print(f"\n[Pipeline] 청크 {chunk_idx + 1}/3 처리 시작")
 
-            if qa_data and "question" in qa_data:
-                # RAGAS 평가 호출
-                score_data = evaluate_qa_quality(
-                    context=chunk,
-                    question=qa_data["question"],
-                    ground_truth=qa_data["answer"]
+            # 5-1. 후보 N개 생성 (temperature 높여 다양성 확보)
+            candidates = generate_multiple_qa(chunk, n=N_CANDIDATES)
+            if not candidates:
+                print(f"  [Pipeline] 청크 {chunk_idx + 1}: 후보 생성 실패, 건너뜀")
+                continue
+
+            # 5-2. G-Eval로 후보 품질 평가 → threshold 필터 → top_k 선택
+            selected = filter_qa_by_geval(
+                context=chunk,
+                qa_candidates=candidates,
+                threshold=GEVAL_THRESHOLD,
+                top_k=TOP_K_PER_CHUNK,
+            )
+
+            # 5-3. 선택된 Q&A를 DB에 저장
+            for qa in selected:
+                geval = qa["geval"]
+                scores = geval["scores"]
+
+                # G-Eval 차원별 점수를 기존 DB 컬럼에 매핑
+                # faithfulness_score  ← 문맥 충실도 관련 차원 (relevance + answerability 평균, 0~1)
+                # answer_relevance_score ← 질문 품질 차원 (clarity + specificity + difficulty 평균, 0~1)
+                faithfulness_mapped = round(
+                    (scores["relevance"] + scores["answerability"]) / 2 / 5.0, 4
+                )
+                relevance_mapped = round(
+                    (scores["clarity"] + scores["specificity"] + scores["difficulty"]) / 3 / 5.0, 4
                 )
 
-                # 로컬 DB qa_evaluations 테이블에 결과 저장
                 new_qa = QAEvaluation(
                     document_id=document_id,
-                    question=qa_data.get("question"),
-                    ground_truth=qa_data.get("answer"),
+                    question=qa["question"],
+                    ground_truth=qa["answer"],
                     context=chunk,
-                    faithfulness_score=score_data.get("faithfulness"),
-                    answer_relevance_score=score_data.get("answer_relevancy")
+                    faithfulness_score=faithfulness_mapped,
+                    answer_relevance_score=relevance_mapped,
                 )
                 db.add(new_qa)
                 db.commit()
                 db.refresh(new_qa)
 
-                qa_data["db_id"] = new_qa.id
-                qa_data["score_data"] = score_data
-                qa_pairs.append(qa_data)
+                qa_pairs.append({
+                    "question": qa["question"],
+                    "answer":   qa["answer"],
+                    "db_id":    new_qa.id,
+                    "geval":    geval,
+                    "faithfulness_mapped":  faithfulness_mapped,
+                    "relevance_mapped":     relevance_mapped,
+                })
 
         # 6. 상태 업데이트 및 최종 반환
         new_doc.status = "완료"
@@ -136,12 +131,14 @@ async def run_pipeline(req: PipelineRequest, db: Session = Depends(get_db)):
 
         final_results = []
         for i, qa in enumerate(qa_pairs, start=1):
-            s = qa["score_data"]
-            avg_score = round((s["faithfulness"] + s["answer_relevancy"]) / 2, 2)
+            geval = qa["geval"]
+            avg_score = round(
+                (qa["faithfulness_mapped"] + qa["relevance_mapped"]) / 2, 2
+            )
 
             final_results.append({
                 "index": i,
-                "qa_uuid": qa.get("db_id"),
+                "qa_uuid": qa["db_id"],
                 "document_uuid": document_id,
                 "q": qa["question"],
                 "doc": req.original_filename,
@@ -149,9 +146,14 @@ async def run_pipeline(req: PipelineRequest, db: Session = Depends(get_db)):
                 "color": style["color"],
                 "bg": style["bg"],
                 "answer": qa["answer"],
-                "score": avg_score,
-                "faithfulness": round(s["faithfulness"], 2),
-                "answer_relevancy": round(s["answer_relevancy"], 2)
+                "score": round(geval["normalized_score"], 2),
+                "faithfulness": round(qa["faithfulness_mapped"], 2),
+                "answer_relevancy": round(qa["relevance_mapped"], 2),
+                "geval_detail": {
+                    "weighted_score": geval["weighted_score"],
+                    "normalized_score": geval["normalized_score"],
+                    "scores": geval["scores"],
+                },
             })
 
         return final_results

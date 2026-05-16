@@ -1,19 +1,34 @@
 import os
+import json
 import numpy as np
 from dotenv import load_dotenv
 from datasets import Dataset
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage
 
 from ragas.metrics import (
     Faithfulness,
-    AnswerRelevancy,
     AnswerCorrectness,
 )
-# ✅ AnswerSimilarity 제거 (embed_text 인터페이스 불일치 → ragas 버전 문제)
 from ragas import evaluate
 
 load_dotenv()
+
+_KOREAN_SYSTEM = SystemMessage(content="당신은 한국어 전문가입니다. 모든 질문과 답변을 반드시 한국어로만 작성하세요.")
+
+class _KoreanChatOpenAI(ChatOpenAI):
+    """RAGAS 내부 프롬프트에 한국어 시스템 메시지를 주입하는 래퍼."""
+
+    def invoke(self, input, config=None, **kwargs):
+        if isinstance(input, list) and not any(isinstance(m, SystemMessage) for m in input):
+            input = [_KOREAN_SYSTEM] + list(input)
+        return super().invoke(input, config, **kwargs)
+
+    async def ainvoke(self, input, config=None, **kwargs):
+        if isinstance(input, list) and not any(isinstance(m, SystemMessage) for m in input):
+            input = [_KOREAN_SYSTEM] + list(input)
+        return await super().ainvoke(input, config, **kwargs)
 
 # ─────────────────────────────────────────────────────────
 # 전역 임베딩 캐시
@@ -54,6 +69,43 @@ def _zero_scores() -> dict:
     }
 
 
+def _evaluate_answer_relevancy(question: str, answer: str, llm) -> float:
+    """
+    LLM 판사 방식으로 질문 적합도를 직접 평가합니다.
+    RAGAS AnswerRelevancy(역질문 생성)를 대체합니다.
+
+    - 1.0: 질문의 핵심을 완전하고 직접적으로 다룸
+    - 0.7: 질문에 관련되나 일부 핵심 내용 누락
+    - 0.4: 부분적으로만 관련됨
+    - 0.1: 질문과 거의 관련 없음
+    """
+    prompt = f"""당신은 Q&A 평가 전문가입니다.
+아래 질문과 답변을 읽고, 답변이 질문의 의도에 얼마나 적합하게 대답했는지 평가하세요.
+
+[질문]: {question}
+[답변]: {answer}
+
+[평가 기준]:
+1.0 = 질문의 핵심을 완전하고 직접적으로 다룸
+0.7 = 질문에 관련되나 일부 핵심 내용 누락
+0.4 = 부분적으로만 관련됨
+0.1 = 질문과 거의 관련 없음
+
+결과를 반드시 아래 JSON 형식으로만 출력하세요:
+{{"score": 점수(0.0~1.0), "reason": "한 문장 이유"}}"""
+
+    try:
+        result = llm.invoke([HumanMessage(content=prompt)])
+        data = json.loads(result.content)
+        score = float(data.get("score", 0.5))
+        score = max(0.0, min(1.0, score))
+        print(f"[DEBUG] answer_relevancy (LLM judge): {score:.4f} | {data.get('reason', '')}")
+        return round(score, 4)
+    except Exception as e:
+        print(f"[ERROR] answer_relevancy 평가 실패: {e}")
+        return 0.5
+
+
 # ─────────────────────────────────────────────────────────
 # ✅ 핵심 평가 함수
 # ─────────────────────────────────────────────────────────
@@ -82,19 +134,18 @@ def evaluate_user_document(
         print("[WARN] ground_truth 없음 → answer_correctness 0점 처리 가능")
 
     # ── LLM 설정 ─────────────────────────────────────────
-    judge_llm = ChatGroq(
-        api_key=os.environ.get("GROQ_API_KEY"),
-        model="llama-3.3-70b-versatile",
+    judge_llm = _KoreanChatOpenAI(
+        api_key=os.environ.get("OPENAI_API_KEY"),
+        model="gpt-4o-mini",
         temperature=0,
-        n=1,
     )
 
     embeddings = get_embeddings()
 
-    # ✅ 3개 메트릭만 사용 (AnswerSimilarity 제거)
+    # Faithfulness, AnswerCorrectness — RAGAS 처리
+    # AnswerRelevancy — LLM 직접 평가로 대체 (역질문 방식 불안정 문제 해결)
     metrics = [
         Faithfulness(llm=judge_llm),
-        AnswerRelevancy(llm=judge_llm, embeddings=embeddings),
         AnswerCorrectness(llm=judge_llm),
     ]
 
@@ -106,7 +157,7 @@ def evaluate_user_document(
         "ground_truth": [ground_truth or ""],
     })
 
-    # ── 평가 실행 ─────────────────────────────────────────
+    # ── RAGAS 평가 실행 ───────────────────────────────────
     try:
         result = evaluate(
             dataset,
@@ -122,14 +173,8 @@ def evaluate_user_document(
         print(f"[ERROR] Ragas 평가 실패: {e}")
         return _zero_scores()
 
-    # ─────────────────────────────────────────────────────
-    # ✅ 수정 1: 숫자형 컬럼만 선택 후 mean() 호출
-    #    → string dtype 컬럼(question, answer 등) 제외
-    # ─────────────────────────────────────────────────────
     try:
-        scores_df = result.to_pandas()
-
-        # ✅ 핵심: 숫자형 컬럼만 추출
+        scores_df   = result.to_pandas()
         numeric_df  = scores_df.select_dtypes(include=[np.number])
         scores_dict = numeric_df.mean().to_dict()
 
@@ -142,8 +187,10 @@ def evaluate_user_document(
 
     # ── 점수 추출 ─────────────────────────────────────────
     faithfulness       = clean_score(scores_dict.get("faithfulness",       0.0))
-    answer_relevancy   = clean_score(scores_dict.get("answer_relevancy",   0.0))
     answer_correctness = clean_score(scores_dict.get("answer_correctness", 0.0))
+
+    # ── 질문 적합도: LLM 직접 평가 ───────────────────────
+    answer_relevancy = _evaluate_answer_relevancy(question, user_answer, judge_llm)
 
     # 종합 평균 (3개 메트릭 기준)
     avg_score = round(

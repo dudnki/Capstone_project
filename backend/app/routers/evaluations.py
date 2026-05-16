@@ -3,11 +3,20 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import pandas as pd
 import os
+import re
+import io
 
 from app.services.database import get_db, Document, QAEvaluation
 from app.services.ragas_eval import evaluate_user_document
 
 router = APIRouter()
+
+
+def _fix_csv_newlines(content: str) -> str:
+    """줄바꿈 없이 이어진 CSV 행을 수정합니다.
+    예: ...답변.""2","다음질문"... → ...답변."↵"2","다음질문"...
+    """
+    return re.sub(r'""(\d+)","', '"\n"\\1","', content)
 
 UPLOAD_DIR = "uploaded_pdf"
 
@@ -47,17 +56,25 @@ async def submit_student_answers(
         ext = os.path.splitext(req.original_filename)[-1].lower()
         if ext == ".csv":
             df = None
-            detected_cols = {}
+
+            # 줄바꿈 없이 이어진 CSV 행 전처리
+            with open(file_path, "r", encoding="utf-8-sig", errors="replace") as _f:
+                _raw = _f.read()
+            _fixed = _fix_csv_newlines(_raw)
+            if _fixed != _raw:
+                print(f"[DEBUG CSV] 줄바꿈 자동 수정 적용됨")
+            _csv_source = io.StringIO(_fixed)
+
+            # 시도 1: 헤더 있는 CSV (qa_id, answer 컬럼명 명시)
             for sep in [",", ";", "\t"]:
                 try:
+                    _csv_source.seek(0)
                     tmp = pd.read_csv(
-                        file_path,
-                        encoding="utf-8-sig",
+                        _csv_source,
                         sep=sep,
                         engine="python",
                         on_bad_lines="warn",
                     )
-                    # 컬럼명 앞에 BOM/숨은문자가 붙은 경우 정규화
                     col_rename = {}
                     for col in tmp.columns:
                         for target in ["qa_id", "question", "answer"]:
@@ -66,18 +83,50 @@ async def submit_student_answers(
                                 break
                     if col_rename:
                         tmp = tmp.rename(columns=col_rename)
-                    detected_cols[repr(sep)] = tmp.columns.tolist()
                     print(f"[DEBUG CSV] sep={repr(sep)}, columns={tmp.columns.tolist()}")
                     if {"qa_id", "answer"}.issubset(set(tmp.columns)):
                         df = tmp
                         break
                 except Exception as e:
                     print(f"[DEBUG CSV] sep={repr(sep)}, error={e}")
-                    continue
+
+            # 시도 2: 헤더 없는 CSV — 위치 기반으로 컬럼 자동 매핑
+            # 지원 형식:
+            #   (qa_id, answer)               — 2컬럼
+            #   (index, question, answer)     — 3컬럼 (순번, 질문, 답변)
+            if df is None:
+                for sep in [",", ";", "\t"]:
+                    try:
+                        _csv_source.seek(0)
+                        tmp = pd.read_csv(
+                            _csv_source,
+                            sep=sep,
+                            engine="python",
+                            header=None,
+                            on_bad_lines="warn",
+                        )
+                        n_cols = len(tmp.columns)
+                        if n_cols >= 3:
+                            tmp = tmp.iloc[:, :3]
+                            tmp.columns = ["qa_id", "question", "answer"]
+                        elif n_cols == 2:
+                            tmp.columns = ["qa_id", "answer"]
+                        else:
+                            continue
+                        print(f"[DEBUG CSV] no-header mode, sep={repr(sep)}, shape={tmp.shape}")
+                        df = tmp
+                        break
+                    except Exception as e:
+                        print(f"[DEBUG CSV] no-header sep={repr(sep)}, error={e}")
+
             if df is None:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"CSV 파일에서 qa_id, answer 컬럼을 찾을 수 없습니다. 감지된 컬럼: {detected_cols}",
+                    detail=(
+                        "CSV를 파싱할 수 없습니다. "
+                        "지원 형식: (1) 헤더 포함 — qa_id,answer  "
+                        "(2) 헤더 없음 — 순번,질문,답변  또는  qa_id,답변"
+                    ),
                 )
         elif ext in [".xlsx", ".xls"]:
             df = pd.read_excel(file_path)
@@ -105,18 +154,40 @@ async def submit_student_answers(
         # ── STEP 4. 행별 채점 ────────────────────────────────────
         results = []
 
+        # 순번 조회를 위해 문서의 QA 목록을 미리 로드 (생성 순서대로)
+        doc_qa_list = (
+            db.query(QAEvaluation)
+            .filter(QAEvaluation.document_id == req.document_id)
+            .order_by(QAEvaluation.created_at)
+            .all()
+        )
+
         for _, row in df.iterrows():
             qa_id       = str(row["qa_id"]).strip()
             user_answer = str(row["answer"]).strip()
 
+            # UUID로 직접 조회 시도
             db_qa = db.query(QAEvaluation).filter(QAEvaluation.id == qa_id).first()
+
+            # UUID 조회 실패 시 순번(1-based)으로 재시도
+            if not db_qa:
+                try:
+                    idx = int(float(qa_id)) - 1  # "1" → 0번 인덱스
+                    if 0 <= idx < len(doc_qa_list):
+                        db_qa = doc_qa_list[idx]
+                        print(f"[INFO] qa_id={qa_id} → 순번 {idx+1}번 Q&A로 매핑")
+                except (ValueError, TypeError):
+                    pass
+
             if not db_qa:
                 print(f"[WARN] qa_id={qa_id} DB에 없음, 스킵")
                 continue
 
             # ── RAGAS 채점 호출 ──────────────────────────────────
+            # 질문이 생성된 청크를 우선 사용 (없으면 문서 전체로 폴백)
+            eval_context = db_qa.context if db_qa.context else raw_context
             report = evaluate_user_document(
-                context=raw_context,
+                context=eval_context,
                 question=db_qa.question,
                 ground_truth=db_qa.ground_truth,
                 user_answer=user_answer,

@@ -35,3 +35,8 @@ backend/.venv/
 venv/
 __pycache__/
 *.pyc
+backend/capstone.db
+backend/uploaded_pdf/
+
+backend/capstone.db
+backend/uploaded_pdf/
