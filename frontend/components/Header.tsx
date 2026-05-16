@@ -1,7 +1,9 @@
 ﻿import React from 'react';
+import type { PipelineMode } from '../src/types';
 
 interface HeaderProps {
   activeMenu: string;
+  pipelineMode: PipelineMode;
   isGenerating: boolean;
   isEvaluating: boolean;
   onActionClick: () => void;
@@ -14,6 +16,7 @@ interface HeaderProps {
 
 export default function Header({
   activeMenu,
+  pipelineMode,
   isGenerating,
   isEvaluating,
   onActionClick,
@@ -24,10 +27,15 @@ export default function Header({
   secondaryStatus,
 }: HeaderProps) {
   const isTestsetMenu = activeMenu === '테스트셋 생성';
+  const isHuman = pipelineMode === 'human';
   const isLoading = isTestsetMenu ? isGenerating : isEvaluating;
   const isDisabled = isLoading || isActionDisabled;
-  const buttonLabel = isTestsetMenu ? '질문 생성하기' : '평가 실행하기';
-  const loadingLabel = isTestsetMenu ? '질문 생성 중...' : '평가 실행 중...';
+  const buttonLabel = isTestsetMenu
+    ? (isHuman ? '문제 생성하기' : '질문 생성하기')
+    : (isHuman ? '시험결과보기' : '평가 실행하기');
+  const loadingLabel = isTestsetMenu
+    ? (isHuman ? '문제 생성 중...' : '질문 생성 중...')
+    : (isHuman ? '채점 실행 중...' : '평가 실행 중...');
 
   return (
     <header className="relative z-[60] flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4 shadow-[0_1px_4px_rgba(15,23,42,0.04)] lg:px-6">
@@ -79,18 +87,28 @@ export default function Header({
         </div>
       </div>
 
-      <button
-        disabled={isDisabled}
-        onClick={onActionClick}
-        className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
-          isDisabled
-            ? 'cursor-not-allowed bg-slate-200 text-slate-400'
-            : 'bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.18)] hover:bg-blue-700'
-        }`}
-      >
-        {!isDisabled && <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-200" />}
-        {isLoading ? loadingLabel : buttonLabel}
-      </button>
+      <div className="flex shrink-0 items-center gap-3">
+        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+          pipelineMode === 'human'
+            ? 'bg-emerald-50 text-emerald-700'
+            : 'bg-blue-50 text-blue-700'
+        }`}>
+          {pipelineMode === 'human' ? '사용자 평가' : '모델 평가'}
+        </span>
+
+        <button
+          disabled={isDisabled}
+          onClick={onActionClick}
+          className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
+            isDisabled
+              ? 'cursor-not-allowed bg-slate-200 text-slate-400'
+              : 'bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.18)] hover:bg-blue-700'
+          }`}
+        >
+          {!isDisabled && <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-200" />}
+          {isLoading ? loadingLabel : buttonLabel}
+        </button>
+      </div>
     </header>
   );
 }

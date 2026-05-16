@@ -69,6 +69,107 @@ def _zero_scores() -> dict:
     }
 
 
+def _get_feedback_llm():
+    return _KoreanChatOpenAI(
+        api_key=os.environ.get("OPENAI_API_KEY"),
+        model="gpt-4o-mini",
+        temperature=0.3,
+    )
+
+
+def generate_question_feedback(
+    question: str,
+    user_answer: str,
+    ground_truth: str,
+    scores: dict,
+) -> dict:
+    """문항별 점수 근거 · 개선점 · 학습 조언 생성."""
+    if not user_answer:
+        return {"reasoning": "답변이 제출되지 않았습니다.", "improvements": "", "advice": ""}
+
+    llm = _get_feedback_llm()
+    prompt = f"""당신은 교육 평가 전문가입니다. 아래 문제와 학생 답변, 채점 결과를 분석해 피드백을 작성하세요.
+
+[문제]: {question}
+[모범 답안]: {ground_truth}
+[학생 답변]: {user_answer}
+
+[채점 결과]
+- 질문 이해도: {scores.get('answer_relevancy', 0):.2f} / 1.00
+- 내용 완성도: {scores.get('answer_correctness', 0):.2f} / 1.00
+- 자료 활용도: {scores.get('faithfulness', 0):.2f} / 1.00
+- 종합 점수  : {scores.get('avg_score', 0):.2f} / 1.00
+
+아래 JSON 형식으로만 응답하세요 (다른 텍스트 금지):
+{{
+  "reasoning": "각 지표별 점수 근거를 2~3문장으로 설명",
+  "improvements": "부족한 부분과 구체적인 개선 방향을 1~2문장으로",
+  "advice": "이 주제를 더 잘 이해하기 위한 학습 조언을 1~2문장으로"
+}}"""
+
+    try:
+        result = llm.invoke([HumanMessage(content=prompt)])
+        text = result.content.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        data = json.loads(text)
+        return {
+            "reasoning":    str(data.get("reasoning", "")),
+            "improvements": str(data.get("improvements", "")),
+            "advice":       str(data.get("advice", "")),
+        }
+    except Exception as e:
+        print(f"[ERROR] 문항 피드백 생성 실패: {e}")
+        return {"reasoning": "", "improvements": "", "advice": ""}
+
+
+def generate_overall_feedback(results: list) -> dict:
+    """전체 채점 결과를 바탕으로 잘한점·학습방향 생성."""
+    if not results:
+        return {"strengths": "", "direction": ""}
+
+    llm = _get_feedback_llm()
+    lines = []
+    for i, r in enumerate(results, 1):
+        s = r.get("scores", {})
+        lines.append(
+            f"{i}. {r.get('question','')[:40]}... "
+            f"[종합:{r.get('avg_score',0):.2f} "
+            f"이해도:{s.get('answer_relevancy',0):.2f} "
+            f"완성도:{s.get('answer_correctness',0):.2f} "
+            f"활용도:{s.get('faithfulness',0):.2f}]"
+        )
+    summary_text = "\n".join(lines)
+
+    prompt = f"""당신은 교육 평가 전문가입니다. 아래는 학생의 전체 시험 채점 결과입니다.
+
+{summary_text}
+
+아래 JSON 형식으로만 응답하세요 (다른 텍스트 금지):
+{{
+  "strengths": "학생이 전반적으로 잘한 점을 2~3문장으로 구체적으로 칭찬",
+  "direction": "앞으로 어떻게 공부하면 좋을지 구체적인 학습 방향을 2~3문장으로 제시"
+}}"""
+
+    try:
+        result = llm.invoke([HumanMessage(content=prompt)])
+        text = result.content.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        data = json.loads(text)
+        return {
+            "strengths": str(data.get("strengths", "")),
+            "direction": str(data.get("direction", "")),
+        }
+    except Exception as e:
+        print(f"[ERROR] 전체 피드백 생성 실패: {e}")
+        return {"strengths": "", "direction": ""}
+
+
 def _evaluate_answer_relevancy(question: str, answer: str, llm) -> float:
     """
     LLM 판사 방식으로 질문 적합도를 직접 평가합니다.

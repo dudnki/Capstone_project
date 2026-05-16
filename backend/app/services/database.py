@@ -53,13 +53,25 @@ class QAEvaluation(Base):
     answer_relevance_score = Column(Float)
     correctness_score = Column(Float)  # 추가됨
     similarity_score = Column(Float)   # 추가됨
-    
+    feedback = Column(Text, nullable=True)
+
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 # ==========================================
 # 3. 앱 시작 시 테이블 자동 생성 및 DB 세션 함수
 # ==========================================
 Base.metadata.create_all(bind=engine)
+
+# 기존 DB에 feedback 컬럼이 없을 경우 자동 추가
+with engine.connect() as _conn:
+    try:
+        _conn.execute(__import__('sqlalchemy').text(
+            "ALTER TABLE qa_evaluations ADD COLUMN feedback TEXT"
+        ))
+        _conn.commit()
+        print("[DB] qa_evaluations.feedback 컬럼 추가 완료")
+    except Exception:
+        pass  # 이미 존재하면 무시
 
 def get_db():
     db = SessionLocal()

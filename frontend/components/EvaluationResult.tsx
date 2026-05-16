@@ -4,9 +4,11 @@ import type {
   EvaluationSummary,
   EvaluationRow,
   EvaluationRowStatus,
+  PipelineMode,
 } from '../src/types';
 
 interface EvaluationResultProps {
+  mode: PipelineMode;
   isEvaluating: boolean;
   resultFile: File | null;
   generatedSummary: GeneratedSummary | null;
@@ -70,6 +72,7 @@ const getSummaryScores = (s: EvaluationSummary) => ({
 });
 
 export default function EvaluationResult({
+  mode,
   isEvaluating,
   resultFile,
   generatedSummary,
@@ -88,6 +91,7 @@ export default function EvaluationResult({
   restoreScrollTop,
 }: EvaluationResultProps) {
   const [statusFilter, setStatusFilter] = useState<'all' | EvaluationRowStatus>('all');
+  const isHuman = mode === 'human';
 
   const hasResults = evaluationRows.length > 0;
 
@@ -142,30 +146,26 @@ export default function EvaluationResult({
       value: generatedSummary ? `${generatedSummary.questionCount}개 준비` : '필요',
     },
     {
-      label: '결과 파일',
+      label: isHuman ? '답안지' : '결과 파일',
       value: resultFile ? '업로드됨' : '없음',
     },
     {
-      label: '평가 상태',
+      label: isHuman ? '채점 상태' : '평가 상태',
       value: evaluationSummary ? '완료' : isEvaluating ? '진행 중' : '대기',
     },
   ];
 
-  // ✅ 수정: title 필드 올바르게 포함
-  const metricPreviewCards = [
-  {
-    title: '질문 적합도', // title 필드 추가
-    description: '답변이 질문 의도에 맞게 작성되었는지 확인합니다.',
-  },
-  {
-    title: '정확도', // title 필드 추가
-    description: '답변 내용이 기준 문서와 비교해 정확한지 확인합니다.',
-  },
-  {
-    title: '문서 일치도', // title 필드 추가 (올바른 문자열)
-    description: '답변이 기준 문서 내용에 기반했는지 확인합니다.',
-  },
-];
+  const metricPreviewCards = isHuman
+    ? [
+        { title: '질문 이해도', description: '질문이 무엇을 묻는지 파악하고 그에 맞게 답변했나요?' },
+        { title: '내용 완성도', description: '핵심 내용을 빠짐없이 포함했나요?' },
+        { title: '자료 활용도', description: '제공된 자료를 벗어나지 않고 정확히 활용했나요?' },
+      ]
+    : [
+        { title: '질문 적합도', description: '답변이 질문 의도에 맞게 작성되었는지 확인합니다.' },
+        { title: '정확도',      description: '답변 내용이 기준 문서와 비교해 정확한지 확인합니다.' },
+        { title: '문서 일치도', description: '답변이 기준 문서 내용에 기반했는지 확인합니다.' },
+      ];
 
 
   return (
@@ -180,11 +180,13 @@ export default function EvaluationResult({
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
-                Evaluation
+                {isHuman ? 'Exam Result' : 'Evaluation'}
               </p>
-              <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">성능 평가</h2>
+              <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">{isHuman ? '시험 결과보기' : '성능 평가'}</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                사용자 결과 엑셀 파일을 업로드해 답변 품질을 한 화면에서 확인합니다.
+                {isHuman
+                  ? '답안지를 제출하고 시험 결과를 한 화면에서 확인합니다.'
+                  : '사용자 결과 엑셀 파일을 업로드해 답변 품질을 한 화면에서 확인합니다.'}
               </p>
             </div>
 
@@ -206,13 +208,15 @@ export default function EvaluationResult({
           <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-xl font-semibold text-slate-900">결과 파일 업로드</h3>
+                <h3 className="text-xl font-semibold text-slate-900">{isHuman ? '답안지 제출' : '결과 파일 업로드'}</h3>
                 <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                   qa_id / answer
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-500">
-                질문 파일을 수행한 결과를 CSV 또는 엑셀 파일로 업로드하면 답변 품질을 평가할 수 있습니다.
+                {isHuman
+                  ? '작성한 답안지를 CSV 또는 엑셀 파일로 제출하면 채점 결과를 확인할 수 있습니다.'
+                  : '질문 파일을 수행한 결과를 CSV 또는 엑셀 파일로 업로드하면 답변 품질을 평가할 수 있습니다.'}
               </p>
             </div>
 
@@ -237,7 +241,7 @@ export default function EvaluationResult({
               {resultFile ? (
                 <div className="flex w-full flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-500">업로드된 결과 파일</p>
+                    <p className="text-xs font-medium text-slate-500">{isHuman ? '제출된 답안지' : '업로드된 결과 파일'}</p>
                     <p className="mt-1 truncate text-xl font-semibold text-slate-900">
                       {resultFile.name}
                     </p>
@@ -266,19 +270,19 @@ export default function EvaluationResult({
               ) : (
                 <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
                   <p className="text-2xl font-semibold tracking-tight text-slate-900">
-                    평가할 결과 파일을 선택하세요
+                    {isHuman ? '답안지를 선택하세요' : '평가할 결과 파일을 선택하세요'}
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
                     qa_id, answer 컬럼이 포함된 CSV 또는 엑셀 파일을 업로드하세요.
                     <br />
-                    현재는 답변 품질 평가 중심으로 결과를 제공합니다.
+                    {isHuman ? '문제별로 작성한 답안이 채점됩니다.' : '현재는 답변 품질 평가 중심으로 결과를 제공합니다.'}
                   </p>
                   <button
                     type="button"
                     onClick={() => resultFileInputRef.current?.click()}
                     className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.18)] hover:bg-blue-700"
                   >
-                    결과 파일 선택
+                    {isHuman ? '답안지 선택' : '결과 파일 선택'}
                   </button>
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
                     {RESULT_EXTENSIONS.map((ext) => (
@@ -299,11 +303,13 @@ export default function EvaluationResult({
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">
                 {resultFile
-                  ? '평가 실행 준비가 완료되었습니다'
-                  : '결과 파일을 업로드하면 상단에서 평가를 실행할 수 있습니다'}
+                  ? (isHuman ? '채점 준비가 완료되었습니다' : '평가 실행 준비가 완료되었습니다')
+                  : (isHuman ? '답안지를 업로드하면 상단에서 채점을 실행할 수 있습니다' : '결과 파일을 업로드하면 상단에서 평가를 실행할 수 있습니다')}
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                qa_id, answer 기준으로 질문 적합도와 답변 정확도를 함께 확인합니다.
+                {isHuman
+                  ? 'qa_id, answer 기준으로 질문 이해도·내용 완성도·자료 활용도를 확인합니다.'
+                  : 'qa_id, answer 기준으로 질문 적합도와 답변 정확도를 함께 확인합니다.'}
               </p>
             </div>
           </div>
@@ -352,31 +358,31 @@ export default function EvaluationResult({
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.overall)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변 품질을 종합한 평균 점수</p>
+            <p className="mt-2 text-xs text-slate-500">{isHuman ? '시험 점수 종합 평균' : '답변 품질을 종합한 평균 점수'}</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">질문 적합도</p>
+            <p className="text-xs text-slate-500">{isHuman ? '질문 이해도' : '질문 적합도'}</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.relevancy)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변이 질문 의도에 맞는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">{isHuman ? '질문이 무엇을 묻는지 파악하고 맞게 답변했나요?' : '답변이 질문 의도에 맞는지 평가'}</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">답변 정확도</p>
+            <p className="text-xs text-slate-500">{isHuman ? '내용 완성도' : '답변 정확도'}</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.correctness)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변 내용이 기준 문서와 비교해 정확한지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">{isHuman ? '핵심 내용을 빠짐없이 포함했나요?' : '답변 내용이 기준 문서와 비교해 정확한지 평가'}</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">문서 일치도</p>
+            <p className="text-xs text-slate-500">{isHuman ? '자료 활용도' : '문서 일치도'}</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.faithfulness)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변이 기준 문서 내용에 기반했는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">{isHuman ? '제공된 자료를 벗어나지 않고 정확히 활용했나요?' : '답변이 기준 문서 내용에 기반했는지 평가'}</p>
           </div>
         </section>
       )}
@@ -390,13 +396,15 @@ export default function EvaluationResult({
           <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
-                평가 결과
+                {isHuman ? '시험 결과' : '평가 결과'}
               </p>
               <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
-                질문별 상세 결과
+                {isHuman ? '문제별 상세 결과' : '질문별 상세 결과'}
               </h3>
               <p className="mt-1 text-sm text-slate-500">
-                질문, 사용자 답변, 세부 점수와 상태를 한 번에 확인합니다.
+                {isHuman
+                  ? '문제, 제출 답안, 세부 점수와 상태를 한 번에 확인합니다.'
+                  : '질문, 사용자 답변, 세부 점수와 상태를 한 번에 확인합니다.'}
               </p>
             </div>
 
@@ -466,19 +474,19 @@ export default function EvaluationResult({
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">질문 적합도</p>
+                          <p className="text-[11px] text-slate-500">{isHuman ? '질문 이해도' : '질문 적합도'}</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.relevancy)}
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">정확도</p>
+                          <p className="text-[11px] text-slate-500">{isHuman ? '내용 완성도' : '정확도'}</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.correctness)}
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">문서 일치도</p>
+                          <p className="text-[11px] text-slate-500">{isHuman ? '자료 활용도' : '문서 일치도'}</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.faithfulness)}
                           </p>
@@ -487,11 +495,47 @@ export default function EvaluationResult({
                     </div>
 
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-xs font-semibold text-slate-500">사용자 답변</p>
+                      <p className="text-xs font-semibold text-slate-500">{isHuman ? '제출 답안' : '사용자 답변'}</p>
                       <p className="mt-2 text-sm leading-7 text-slate-700">
                         {(row as any).answer}
                       </p>
                     </div>
+
+                    {(row as any).feedback && (
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {[
+                          {
+                            icon: '📊',
+                            label: '점수 근거',
+                            text: (row as any).feedback.reasoning,
+                            border: 'border-blue-100',
+                            bg: 'bg-blue-50',
+                            title: 'text-blue-700',
+                          },
+                          {
+                            icon: '✏️',
+                            label: '개선점',
+                            text: (row as any).feedback.improvements,
+                            border: 'border-amber-100',
+                            bg: 'bg-amber-50',
+                            title: 'text-amber-700',
+                          },
+                          {
+                            icon: '💡',
+                            label: '학습 조언',
+                            text: (row as any).feedback.advice,
+                            border: 'border-emerald-100',
+                            bg: 'bg-emerald-50',
+                            title: 'text-emerald-700',
+                          },
+                        ].map((item) => (
+                          <div key={item.label} className={`rounded-xl border ${item.border} ${item.bg} p-4`}>
+                            <p className={`text-xs font-semibold ${item.title}`}>{item.icon} {item.label}</p>
+                            <p className="mt-2 text-xs leading-6 text-slate-700">{item.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     <div>
                       <span
@@ -517,6 +561,39 @@ export default function EvaluationResult({
             )}
           </div>
         </section>
+      )}
+
+      {/* 전체 요약: 잘한점 + 학습방향 */}
+      {evaluationSummary && (evaluationSummary as any).overallFeedback && (
+        (() => {
+          const of_ = (evaluationSummary as any).overallFeedback;
+          return (of_.strengths || of_.direction) ? (
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+              <div className="border-b border-slate-100 px-6 py-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+                  {isHuman ? '종합 피드백' : 'Overall Feedback'}
+                </p>
+                <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
+                  {isHuman ? '잘한 점 & 학습 방향' : '종합 평가 요약'}
+                </h3>
+              </div>
+              <div className="grid gap-5 p-6 sm:grid-cols-2">
+                {of_.strengths && (
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
+                    <p className="text-sm font-bold text-emerald-700">✅ 잘한 점</p>
+                    <p className="mt-3 text-sm leading-7 text-slate-700">{of_.strengths}</p>
+                  </div>
+                )}
+                {of_.direction && (
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
+                    <p className="text-sm font-bold text-blue-700">📚 학습 방향</p>
+                    <p className="mt-3 text-sm leading-7 text-slate-700">{of_.direction}</p>
+                  </div>
+                )}
+              </div>
+            </section>
+          ) : null;
+        })()
       )}
     </div>
   );

@@ -7,7 +7,7 @@ import re
 import io
 
 from app.services.database import get_db, Document, QAEvaluation
-from app.services.ragas_eval import evaluate_user_document
+from app.services.ragas_eval import evaluate_user_document, generate_question_feedback, generate_overall_feedback
 
 router = APIRouter()
 
@@ -75,12 +75,16 @@ async def submit_student_answers(
                         engine="python",
                         on_bad_lines="warn",
                     )
+                    _KO_MAP = {"번호": "qa_id", "문제": "question", "질문": "question", "답안": "answer", "답변": "answer"}
                     col_rename = {}
                     for col in tmp.columns:
-                        for target in ["qa_id", "question", "answer"]:
-                            if col != target and col.lower().endswith(target):
-                                col_rename[col] = target
-                                break
+                        if col in _KO_MAP:
+                            col_rename[col] = _KO_MAP[col]
+                        else:
+                            for target in ["qa_id", "question", "answer"]:
+                                if col != target and col.lower().endswith(target):
+                                    col_rename[col] = target
+                                    break
                     if col_rename:
                         tmp = tmp.rename(columns=col_rename)
                     print(f"[DEBUG CSV] sep={repr(sep)}, columns={tmp.columns.tolist()}")
@@ -164,7 +168,8 @@ async def submit_student_answers(
 
         for _, row in df.iterrows():
             qa_id       = str(row["qa_id"]).strip()
-            user_answer = str(row["answer"]).strip()
+            raw_answer  = row["answer"]
+            user_answer = "" if (raw_answer is None or str(raw_answer).strip().lower() in ("nan", "none", "")) else str(raw_answer).strip()
 
             # UUID로 직접 조회 시도
             db_qa = db.query(QAEvaluation).filter(QAEvaluation.id == qa_id).first()
@@ -203,12 +208,27 @@ async def submit_student_answers(
                 (faithfulness_score + answer_relevance_score + correctness_score) / 3, 4
             ))
 
+            # ── 문항별 피드백 생성 ────────────────────────────────
+            scores_for_feedback = {
+                "faithfulness":       faithfulness_score,
+                "answer_relevancy":   answer_relevance_score,
+                "answer_correctness": correctness_score,
+                "avg_score":          avg_score,
+            }
+            feedback = generate_question_feedback(
+                question=db_qa.question,
+                user_answer=user_answer,
+                ground_truth=db_qa.ground_truth,
+                scores=scores_for_feedback,
+            )
+
             # ── DB 저장 ──────────────────────────────────────────
+            import json as _json
             db_qa.user_answer            = user_answer
             db_qa.faithfulness_score     = faithfulness_score
             db_qa.answer_relevance_score = answer_relevance_score
             db_qa.correctness_score      = correctness_score
-            # ✅ similarity_score 컬럼이 DB에 있다면 0.0 으로 명시
+            db_qa.feedback               = _json.dumps(feedback, ensure_ascii=False)
             if hasattr(db_qa, "similarity_score"):
                 db_qa.similarity_score   = 0.0
 
@@ -233,6 +253,7 @@ async def submit_student_answers(
                     "answer_correctness": correctness_score,
                 },
                 "avg_score": avg_score,
+                "feedback":  feedback,
             })
 
         if not results:
@@ -259,6 +280,9 @@ async def submit_student_answers(
                 sum(r["scores"]["answer_correctness"] for r in results) / total, 4
             ),
         }
+
+        overall_feedback = generate_overall_feedback(results)
+        summary["overallFeedback"] = overall_feedback
 
         print(f"[INFO] 전체 요약: {summary}")
 

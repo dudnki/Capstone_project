@@ -7,6 +7,7 @@ import DatasetManager from '../components/DatasetManager';
 import EvaluationResult from '../components/EvaluationResult';
 import type {
   MenuType,
+  PipelineMode,
   QuestionItem,
   GeneratedSummary,
   EvaluationSummary,
@@ -18,8 +19,72 @@ const BASE_URL = 'http://localhost:8001';
 const DOCUMENT_EXTENSIONS = ['.pdf', '.xlsx'];
 const RESULT_EXTENSIONS = ['.csv', '.xlsx'];
 
+function ModeSelectScreen({ onSelect }: { onSelect: (mode: PipelineMode) => void }) {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-6">
+      <div className="mb-10 flex flex-col items-center gap-3">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-[0_12px_28px_rgba(37,99,235,0.22)]">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
+          </svg>
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Pipeline Architect</h1>
+        <p className="text-sm text-slate-500">평가 파이프라인을 선택해주세요</p>
+      </div>
+
+      <div className="grid w-full max-w-2xl grid-cols-1 gap-5 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => onSelect('model')}
+          className="group flex flex-col items-start gap-4 rounded-2xl border border-slate-200 bg-white p-7 text-left shadow-sm transition-all hover:border-blue-300 hover:shadow-[0_8px_24px_rgba(37,99,235,0.12)]"
+        >
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition-colors group-hover:bg-blue-600 group-hover:text-white">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-base font-bold text-slate-900">모델 평가</p>
+            <p className="mt-1 text-sm leading-relaxed text-slate-500">AI 모델의 RAG 응답 품질을<br/>자동으로 측정하고 분석합니다.</p>
+          </div>
+          <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-blue-600">
+            시작하기
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelect('human')}
+          className="group flex flex-col items-start gap-4 rounded-2xl border border-slate-200 bg-white p-7 text-left shadow-sm transition-all hover:border-emerald-300 hover:shadow-[0_8px_24px_rgba(16,185,129,0.12)]"
+        >
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 transition-colors group-hover:bg-emerald-500 group-hover:text-white">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-base font-bold text-slate-900">사용자 평가</p>
+            <p className="mt-1 text-sm leading-relaxed text-slate-500">문서 기반 시험 문제를 생성하고<br/>사람의 답변 능력을 평가합니다.</p>
+          </div>
+          <span className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+            시작하기
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function RagEvaluationPage() {
+  const [selectedMode, setSelectedMode] = useState<PipelineMode | null>(null);
   const [activeMenu, setActiveMenu] = useState<MenuType>('테스트셋 생성');
+  const [pipelineMode, setPipelineMode] = useState<PipelineMode>('model');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
 
@@ -71,16 +136,15 @@ export default function RagEvaluationPage() {
 
   const headerStepLabel = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
-      const labels = [
-        '1단계 문서 업로드',
-        '2단계 질문 생성',
-        '3단계 질문 검토',
-        '4단계 질문 다운로드',
-      ];
+      const labels = pipelineMode === 'human'
+        ? ['1단계 문서 업로드', '2단계 문제 생성', '3단계 문제 검토', '4단계 문제 다운로드']
+        : ['1단계 문서 업로드', '2단계 질문 생성', '3단계 질문 검토', '4단계 질문 다운로드'];
       return labels[Math.min(currentStepValue, 4) - 1];
     }
-    return evaluationSummary ? '평가 결과 확인' : '결과 파일 업로드';
-  }, [activeMenu, currentStepValue, evaluationSummary]);
+    return evaluationSummary
+      ? (pipelineMode === 'human' ? '시험 결과 확인' : '평가 결과 확인')
+      : (pipelineMode === 'human' ? '답안지 업로드' : '결과 파일 업로드');
+  }, [activeMenu, currentStepValue, evaluationSummary, pipelineMode]);
 
   const headerPrimaryStatus = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
@@ -91,7 +155,9 @@ export default function RagEvaluationPage() {
 
   const headerSecondaryStatus = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
-      return generatedSummary ? `질문 ${generatedSummary.questionCount}개` : '질문 생성 전';
+      return generatedSummary
+      ? `${pipelineMode === 'human' ? '문제' : '질문'} ${generatedSummary.questionCount}개`
+      : (pipelineMode === 'human' ? '문제 생성 전' : '질문 생성 전');
     }
     return evaluationSummary
       ? `질문 ${evaluationSummary.evaluatedCount}개 평가`
@@ -307,18 +373,33 @@ export default function RagEvaluationPage() {
     if (generatedQuestions.length === 0) return;
 
     const nowDate = new Date().toISOString().slice(0, 10);
-    const csv = [
-      'qa_id,question,answer',
-      ...generatedQuestions.map(
-        (q) => `"${String(q.id)}","${q.text.replace(/"/g, '""')}",""`
-      ),
-    ].join('\n');
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    let csv: string;
+    let filename: string;
+
+    if (pipelineMode === 'human') {
+      csv = [
+        '번호,문제,답안',
+        ...generatedQuestions.map(
+          (_, idx) => `${idx + 1},"${generatedQuestions[idx].text.replace(/"/g, '""')}",""`
+        ),
+      ].join('\n');
+      filename = `시험지_${nowDate}.csv`;
+    } else {
+      csv = [
+        'qa_id,question,answer',
+        ...generatedQuestions.map(
+          (q) => `"${String(q.id)}","${q.text.replace(/"/g, '""')}",""`
+        ),
+      ].join('\n');
+      filename = `rag_questions_${nowDate}.csv`;
+    }
+
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `rag_questions_${nowDate}.csv`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -407,6 +488,7 @@ export default function RagEvaluationPage() {
           faithfulness:      number;
           answerRelevancy:   number;
           answerCorrectness: number;
+          overallFeedback?:  { strengths: string; direction: string };
         };
         rows: Array<{
           qa_id:     string;
@@ -418,6 +500,7 @@ export default function RagEvaluationPage() {
             answer_correctness: number;
           };
           avg_score: number;
+          feedback?: { reasoning: string; improvements: string; advice: string };
         }>;
       } = await evalRes.json();
 
@@ -428,6 +511,7 @@ export default function RagEvaluationPage() {
         faithfulness:      evalData.summary.faithfulness,
         answerRelevancy:   evalData.summary.answerRelevancy,
         answerCorrectness: evalData.summary.answerCorrectness,
+        overallFeedback:   evalData.summary.overallFeedback,
       };
 
       const rows: EvaluationRow[] = evalData.rows.map((row) => ({
@@ -440,8 +524,7 @@ export default function RagEvaluationPage() {
           answer_correctness: row.scores.answer_correctness,
         },
         avg_score: row.avg_score,
-        // EvaluationRowStatus가 필요하면 아래 주석 해제
-        // status: row.avg_score >= 0.7 ? 'pass' : 'fail' as EvaluationRowStatus,
+        feedback:  row.feedback,
       }));
 
       setEvaluationSummary(summary);
@@ -484,10 +567,22 @@ export default function RagEvaluationPage() {
   // ─────────────────────────────────────────────────────────
   // 렌더
   // ─────────────────────────────────────────────────────────
+  if (selectedMode === null) {
+    return (
+      <ModeSelectScreen
+        onSelect={(mode) => {
+          setPipelineMode(mode);
+          setSelectedMode(mode);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="relative flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <Header
         activeMenu={activeMenu}
+        pipelineMode={pipelineMode}
         isGenerating={isGenerating}
         isEvaluating={isEvaluating}
         onActionClick={handleActionClick}
@@ -504,6 +599,7 @@ export default function RagEvaluationPage() {
         <Sidebar
           activeMenu={activeMenu}
           setActiveMenu={(menu) => setActiveMenu(menu as MenuType)}
+          pipelineMode={pipelineMode}
         />
 
         <main
@@ -515,6 +611,7 @@ export default function RagEvaluationPage() {
             <div className="flex min-h-0 flex-1 flex-col">
               {activeMenu === '테스트셋 생성' ? (
                 <DatasetManager
+                  mode={pipelineMode}
                   isGenerating={isGenerating}
                   uploadedFile={uploadedFile}
                   generatedSummary={generatedSummary}
@@ -537,6 +634,7 @@ export default function RagEvaluationPage() {
                 />
               ) : (
                 <EvaluationResult
+                  mode={pipelineMode}
                   isEvaluating={isEvaluating}
                   resultFile={resultFile}
                   generatedSummary={generatedSummary}
