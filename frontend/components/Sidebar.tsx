@@ -1,15 +1,86 @@
-﻿import React from 'react';
+import React, { useState } from 'react';
+import type { DocumentHistoryItem, DocumentHistoryStatus } from '../src/types';
 
 interface SidebarProps {
   activeMenu: string;
   setActiveMenu: (menu: string) => void;
+  documentHistories: DocumentHistoryItem[];
+  activeDocumentId: string | null;
+  onSelectDocumentHistory: (id: string) => void;
+  onStartNewEvaluation: () => void;
+  onDeleteDocumentHistory: (id: string) => void;
 }
 
 const MENUS = ['테스트셋 생성', '성능 평가'] as const;
 
-export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
+const getStatusLabel = (status: DocumentHistoryStatus) => {
+  if (status === 'uploaded') return '업로드';
+  if (status === 'generated') return '질문 생성';
+  if (status === 'downloaded') return '다운로드';
+  return '평가 완료';
+};
+
+const getStatusStyle = (status: DocumentHistoryStatus) => {
+  if (status === 'uploaded') return 'border-slate-200 bg-slate-50 text-slate-500';
+  if (status === 'generated') return 'border-blue-100 bg-blue-50 text-blue-700';
+  if (status === 'downloaded') return 'border-amber-100 bg-amber-50 text-amber-700';
+  return 'border-emerald-100 bg-emerald-50 text-emerald-700';
+};
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+export default function Sidebar({
+  activeMenu,
+  setActiveMenu,
+  documentHistories,
+  activeDocumentId,
+  onSelectDocumentHistory,
+  onStartNewEvaluation,
+  onDeleteDocumentHistory,
+}: SidebarProps) {
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  const handleDeleteHistory = (id: string) => {
+    onDeleteDocumentHistory(id);
+    setOpenMenuId(null);
+  };
+
   return (
-    <aside className="z-[40] hidden w-[168px] flex-shrink-0 border-r border-slate-200 bg-white px-2 py-4 xl:flex xl:flex-col">
+    <aside className="z-[40] hidden w-[272px] flex-shrink-0 border-r border-slate-200 bg-white px-3 py-4 xl:flex xl:flex-col">
+      <button
+        type="button"
+        onClick={() => {
+          setOpenMenuId(null);
+          onStartNewEvaluation();
+        }}
+        className="mb-5 flex w-full items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-3 text-left text-blue-700 transition-colors hover:bg-blue-100"
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 5v14" />
+            <path d="M5 12h14" />
+          </svg>
+        </span>
+
+        <div className="min-w-0">
+          <p className="text-sm font-bold">새 평가 시작</p>
+          <p className="mt-0.5 text-[11px] leading-4 text-blue-600">새 원본 PDF로 평가 세션 생성</p>
+        </div>
+      </button>
+
       <div className="px-2 pb-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Workflow</p>
       </div>
@@ -22,7 +93,10 @@ export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
             <button
               key={menu}
               type="button"
-              onClick={() => setActiveMenu(menu)}
+              onClick={() => {
+                setOpenMenuId(null);
+                setActiveMenu(menu);
+              }}
               className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left text-sm transition-colors ${
                 isActive
                   ? 'border-blue-200 bg-blue-50 text-blue-700'
@@ -75,6 +149,110 @@ export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
             </button>
           );
         })}
+      </div>
+
+      <div className="mt-6 flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center justify-between px-2 pb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Recent Docs</p>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+            {documentHistories.length}
+          </span>
+        </div>
+
+        {documentHistories.length === 0 ? (
+          <div className="mx-1 mt-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center">
+            <p className="text-sm font-semibold text-slate-600">최근 문서 없음</p>
+            <p className="mt-1 text-xs leading-5 text-slate-400">
+              원본 PDF를 업로드하면 이곳에 기록이 남습니다.
+            </p>
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+            {documentHistories.map((item) => {
+              const isActive = activeDocumentId === item.id;
+              const isMenuOpen = openMenuId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  className={`group relative rounded-xl border transition-colors ${
+                    isActive
+                      ? 'border-blue-200 bg-blue-50'
+                      : 'border-transparent hover:border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenMenuId(null);
+                      onSelectDocumentHistory(item.id);
+                    }}
+                    className="w-full px-3 py-3 pr-9 text-left"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p
+                          className={`truncate text-sm font-semibold ${
+                            isActive ? 'text-blue-800' : 'text-slate-700'
+                          }`}
+                        >
+                          {item.name}
+                        </p>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          {item.uploadedAt} · {formatFileSize(item.size)}
+                        </p>
+                      </div>
+
+                      <span className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-500">
+                        {item.extension}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getStatusStyle(
+                          item.status,
+                        )}`}
+                      >
+                        {getStatusLabel(item.status)}
+                      </span>
+                      <span className="text-[11px] text-slate-400">질문 {item.questionCount}개</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenMenuId((prev) => (prev === item.id ? null : item.id));
+                    }}
+                    className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-400 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 ${
+                      isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                    aria-label="최근 문서 메뉴"
+                  >
+                    ···
+                  </button>
+
+                  {isMenuOpen && (
+                    <div className="absolute right-2 top-9 z-50 w-32 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteHistory(item.id);
+                        }}
+                        className="w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-50"
+                      >
+                        기록에서 제거
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </aside>
   );
