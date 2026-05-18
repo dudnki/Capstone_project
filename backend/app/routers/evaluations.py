@@ -5,7 +5,12 @@ import pandas as pd
 import os
 
 from app.services.database import get_db, Document, QAEvaluation
-from app.services.ragas_eval import evaluate_user_document
+from app.services.ragas_eval import (
+    evaluate_user_document,
+    evaluate_model_document,
+    generate_question_feedback,
+    generate_overall_feedback,
+)
 
 router = APIRouter()
 
@@ -16,6 +21,7 @@ class FileSubmitRequest(BaseModel):
     saved_filename:    str
     original_filename: str
     document_id:       str
+    mode:              str = "model"  # "model" | "human"
 
 
 # ─────────────────────────────────────────────────────────
@@ -57,7 +63,6 @@ def submit_student_answers(
                         engine="python",
                         on_bad_lines="warn",
                     )
-                    # 컬럼명 앞에 BOM/숨은문자가 붙은 경우 정규화
                     col_rename = {}
                     for col in tmp.columns:
                         for target in ["qa_id", "question", "answer"]:
@@ -114,30 +119,53 @@ def submit_student_answers(
                 print(f"[WARN] qa_id={qa_id} DB에 없음, 스킵")
                 continue
 
-            # ── RAGAS 채점 호출 ──────────────────────────────────
-            report = evaluate_user_document(
-                context=raw_context,
-                question=db_qa.question,
-                ground_truth=db_qa.ground_truth,
-                user_answer=user_answer,
-            )
+            # ── 채점 호출 (모드에 따라 분기) ─────────────────────
+            eval_context = db_qa.context if db_qa.context else raw_context
+            if req.mode == "human":
+                report = evaluate_user_document(
+                    context=eval_context,
+                    question=db_qa.question,
+                    ground_truth=db_qa.ground_truth,
+                    user_answer=user_answer,
+                )
+            else:
+                report = evaluate_model_document(
+                    context=eval_context,
+                    question=db_qa.question,
+                    ground_truth=db_qa.ground_truth,
+                    answer=user_answer,
+                )
 
-            # ✅ 수정: 3개 메트릭만 저장 (answer_similarity 제거)
             faithfulness_score       = report.get("faithfulness",       0.0)
             answer_relevance_score   = report.get("answer_relevancy",   0.0)
             correctness_score        = report.get("answer_correctness", 0.0)
 
-            # ✅ 수정: avg_score 는 ragas_eval.py 에서 직접 반환
             avg_score = report.get("avg_score", round(
                 (faithfulness_score + answer_relevance_score + correctness_score) / 3, 4
             ))
+
+            # ── 문항별 피드백 생성 (사용자 평가만) ───────────────
+            if req.mode == "human":
+                scores_for_feedback = {
+                    "faithfulness":       faithfulness_score,
+                    "answer_relevancy":   answer_relevance_score,
+                    "answer_correctness": correctness_score,
+                    "avg_score":          avg_score,
+                }
+                feedback = generate_question_feedback(
+                    question=db_qa.question,
+                    user_answer=user_answer,
+                    ground_truth=db_qa.ground_truth,
+                    scores=scores_for_feedback,
+                )
+            else:
+                feedback = None
 
             # ── DB 저장 ──────────────────────────────────────────
             db_qa.user_answer            = user_answer
             db_qa.faithfulness_score     = faithfulness_score
             db_qa.answer_relevance_score = answer_relevance_score
             db_qa.correctness_score      = correctness_score
-            # ✅ similarity_score 컬럼이 DB에 있다면 0.0 으로 명시
             if hasattr(db_qa, "similarity_score"):
                 db_qa.similarity_score   = 0.0
 
@@ -152,7 +180,7 @@ def submit_student_answers(
                 f"avg={avg_score:.2f}"
             )
 
-            results.append({
+            row_data = {
                 "qa_id":    qa_id,
                 "question": db_qa.question,
                 "answer":   user_answer,
@@ -162,7 +190,11 @@ def submit_student_answers(
                     "answer_correctness": correctness_score,
                 },
                 "avg_score": avg_score,
-            })
+            }
+            if feedback:
+                row_data["feedback"] = feedback
+
+            results.append(row_data)
 
         if not results:
             raise HTTPException(
@@ -174,7 +206,6 @@ def submit_student_answers(
         total       = len(results)
         overall_avg = round(sum(r["avg_score"] for r in results) / total, 4)
 
-        # ✅ 수정: 3개 메트릭 기준 요약 (answerSimilarity 제거)
         summary = {
             "evaluatedCount":    total,
             "overallAvgScore":   overall_avg,
@@ -188,6 +219,10 @@ def submit_student_answers(
                 sum(r["scores"]["answer_correctness"] for r in results) / total, 4
             ),
         }
+
+        if req.mode == "human":
+            overall_feedback = generate_overall_feedback(results)
+            summary["overallFeedback"] = overall_feedback
 
         print(f"[INFO] 전체 요약: {summary}")
 
