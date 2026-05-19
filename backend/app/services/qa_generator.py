@@ -15,16 +15,27 @@ from __future__ import annotations
 import os
 import re
 
-from groq import Groq
+from openai import OpenAI
 from pydantic import BaseModel, field_validator
 import instructor
 
+from app.services.qa_critic import (
+    critique_qa,
+    is_qa_passing,
+    format_critique_log,
+    THRESHOLD as CRITIC_THRESHOLD,
+    MIN_PER_DIM as CRITIC_MIN_PER_DIM,
+)
+
 
 # ---------- 설정 ----------
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-_groq_client = Groq(api_key=GROQ_API_KEY)
-_instructor_client = instructor.from_groq(_groq_client)
-_MODEL = "llama-3.3-70b-versatile"
+# Generator: gpt-4o-mini (빠르고 instruction-following 안정적).
+# Critic은 qa_critic.py에서 gpt-4o 사용 — 두 모델 분리하여 self-bias 제거
+# (Zheng et al. 2024, "LLM-as-a-Judge").
+_OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+_openai_client = OpenAI(api_key=_OPENAI_API_KEY)
+_instructor_client = instructor.from_openai(_openai_client)
+_MODEL = "gpt-4o-mini"
 
 
 # Bloom Taxonomy 기반 질문 유형
@@ -156,8 +167,9 @@ def _build_prompt(
     category: str,
     chunk_tokens: list[str],
     available_types: list[tuple[str, str]],
+    refine_feedback: str | None = None,
 ) -> tuple[str, str]:
-    """system_msg, user_prompt 반환."""
+    """system_msg, user_prompt 반환. refine_feedback 있으면 재생성용 개선 지시 추가."""
     types_text = "\n".join(f"- {name}: {desc}" for name, desc in available_types)
     allowed_names = [name for name, _ in available_types]
 
@@ -168,31 +180,46 @@ def _build_prompt(
             f"{', '.join(chunk_tokens)}\n"
         )
 
+    refine_block = ""
+    if refine_feedback:
+        refine_block = (
+            "\n[직전 시도에 대한 G-Eval 평가 피드백 — 이번엔 반드시 개선하라]\n"
+            f"{refine_feedback}\n"
+        )
+
     system_msg = (
-        "당신은 문서 기반 평가 데이터셋을 만드는 한국어 전문가입니다. "
-        "출력은 반드시 한국어와 영문 약어/고유명사로만 구성하며, "
-        "그 외 언어(태국어, 중국어, 일본어 등)는 절대 사용하지 않습니다. "
-        "답변은 청크에 있는 구체적 사실/수치/근거를 포함해야 하며, "
-        "그 근거가 되는 문장을 answer_quote에 글자 그대로 인용해야 합니다."
+        "당신은 한국어 문서 기반 평가 데이터셋을 만드는 전문가입니다.\n"
+        "[언어 규칙 — 절대 위반 금지]\n"
+        "• question, answer 본문은 **반드시 한국어**로 작성한다. 영문 전체 문장으로 작성 금지.\n"
+        "• 영문은 다음 경우에만 허용: (a) 약어/고유명사 (예: LoRA, PiSSA, GSM8K, RFID), "
+        "(b) 청크에 영문으로 그대로 등장하는 표현. 그 외엔 영문 사용 금지.\n"
+        "• 다른 언어(중국어/일본어/태국어 등) 절대 사용 금지.\n"
+        "[답변 정확성]\n"
+        "• 답변에 들어가는 모든 사실/수치/예시는 **청크에 명시적으로 존재**해야 한다. "
+        "청크에 없는 예시·인용·수치를 임의로 만들어 넣지 마라 (특히 영문 참고문헌 등).\n"
+        "• 근거 문장은 answer_quote에 청크 원문 그대로 인용한다."
     )
 
     user_prompt = (
         f"[문서 도메인]: {category}\n\n"
         f"[사용 가능한 질문 유형]\n{types_text}\n\n"
         "위 유형 중 청크 내용에 가장 자연스럽게 맞는 것 1개를 골라 그 유형의 Q&A를 만들어라.\n"
-        f"{anchor_hint}\n"
+        f"{anchor_hint}"
+        f"{refine_block}\n"
         f"[청크 내용]\n{chunk_clean}\n\n"
         "필수 규칙:\n"
         f"1. bloom_type: 다음 중 하나를 정확한 표기로: {', '.join(allowed_names)}\n"
-        "2. 답변에는 청크에 등장하는 구체적 사실/수치/명칭을 포함하라.\n"
-        "3. 답변은 질문의 단순 변형이면 안 된다 (동어반복 금지).\n"
-        "4. 메타 표현 금지 ('이 문서', '위 글' 등).\n"
-        "5. 핵심 키워드가 청크에 있으면 자연스럽게 활용 (강제 아님).\n"
-        "6. 외부 지식, 추측 금지 — 청크 안에 답이 명확히 있어야 함.\n"
-        "7. 출력 언어: 한국어와 영문 약어/고유명사만.\n"
-        "8. anchor_used: 활용한 핵심 키워드 또는 null.\n"
-        "9. **answer_quote**: 답변의 근거가 되는 청크의 문장을 **글자 그대로 인용** "
-        "(5자 이상, 변형/축약 금지). 청크에 실제 등장하는 문장이어야 함."
+        "2. **question은 한국어 의문문**으로 작성 (영문 전체 문장 금지).\n"
+        "3. **answer는 한국어 서술문**으로 작성. 영문은 약어/고유명사/청크 인용에만 허용.\n"
+        "4. 답변에 청크에 등장하는 구체적 사실/수치/명칭을 포함하라.\n"
+        "5. 답변은 질문의 단순 변형이면 안 된다 (동어반복 금지).\n"
+        "6. 메타 표현 금지 ('이 문서', '위 글' 등).\n"
+        "7. 핵심 키워드가 청크에 있으면 자연스럽게 활용 (강제 아님).\n"
+        "8. **외부 지식/추측 금지** — 청크에 없는 예시·인용·수치를 만들어 넣지 마라.\n"
+        "9. anchor_used: 활용한 핵심 키워드 또는 null.\n"
+        "10. **answer_quote**: 답변의 핵심 근거 문장을 청크에서 글자 그대로 인용 "
+        "(가능하면 **완결된 한 문장**, 단순 항목 번호나 짧은 헤더만 인용하지 말 것). "
+        "변형/축약 금지, 청크에 실제 등장해야 함."
     )
     return system_msg, user_prompt
 
@@ -203,17 +230,40 @@ def generate_qa_for_chunk(
     rare_tokens: list[str],
     available_types: list[tuple[str, str]],
     max_outer_retries: int = 3,
+    use_geval: bool = True,
 ) -> QAResult | None:
     """
-    LLM이 청크 보고 Bloom 유형 선택 + Q&A 생성. 모든 검증 통과한 결과만 반환.
+    LLM이 청크 보고 Bloom 유형 선택 + Q&A 생성.
+
+    검증 순서:
+      1) Pydantic field validators (Instructor 자동 재시도)
+      2) bloom_type 허용 리스트
+      3) Citation grounding (answer_quote in chunk)
+      4) 동어반복 차단
+      5) G-Eval critique (5차원 1~5점) — use_geval=True일 때
+         실패 시 feedback을 다음 시도의 프롬프트에 주입 (Critique-Refine)
+
+    Args:
+        use_geval: G-Eval critique-refine loop 사용 여부.
+
+    Returns:
+        검증 모두 통과한 QAResult 또는 None
     """
     chunk_clean = _normalize_korean_spaces(chunk)
     chunk_tokens = _filter_tokens_for_chunk(rare_tokens, chunk_clean)
     chunk_norm_for_match = _normalize_for_match(chunk_clean)
     allowed_names = [name for name, _ in available_types]
-    system_msg, user_prompt = _build_prompt(chunk_clean, category, chunk_tokens, available_types)
+
+    refine_feedback: str | None = None  # 직전 시도 G-Eval 피드백
+    best_result: QAResult | None = None  # 모두 fail 시 최고점 result 보존
+    best_score_avg: float = -1.0
 
     for attempt in range(max_outer_retries):
+        system_msg, user_prompt = _build_prompt(
+            chunk_clean, category, chunk_tokens, available_types,
+            refine_feedback=refine_feedback,
+        )
+
         try:
             result: QAResult = _instructor_client.chat.completions.create(
                 model=_MODEL,
@@ -226,34 +276,80 @@ def generate_qa_for_chunk(
                 temperature=0.3,
             )
 
-            # bloom_type 허용 검증
+            # 1) bloom_type 허용 검증
             if result.bloom_type not in allowed_names:
                 print(f"  [Q&A] 잘못된 bloom_type='{result.bloom_type}' (시도 {attempt+1})")
+                refine_feedback = (
+                    f"bloom_type을 반드시 다음 중 하나로 정확히 적어라: {', '.join(allowed_names)}"
+                )
                 continue
 
-            # Citation grounding 검증
+            # 2) Citation grounding 검증
             quote_norm = _normalize_for_match(result.answer_quote)
             if quote_norm not in chunk_norm_for_match:
                 print(
                     f"  [Q&A] Citation 실패 (시도 {attempt+1}): "
                     f"quote='{result.answer_quote[:50]}...'"
                 )
+                refine_feedback = (
+                    "answer_quote가 청크에 없음. 청크의 문장을 글자 그대로(변형 없이) 인용하라."
+                )
                 continue
 
-            # 동어반복 검증
+            # 3) 동어반복 검증
             try:
                 _check_qa_distinct(result)
             except ValueError as ve:
                 print(f"  [Q&A] 동어반복 (시도 {attempt+1}): {ve}")
+                refine_feedback = (
+                    "답변이 질문의 단순 변형이다. 청크의 구체적 사실/수치/명칭을 답변에 포함하라."
+                )
                 continue
 
-            return result
+            # 4) G-Eval critique
+            if not use_geval:
+                return result
+
+            critique = critique_qa(
+                question=result.question,
+                answer=result.answer,
+                answer_quote=result.answer_quote,
+                chunk=chunk_clean,
+                bloom_type=result.bloom_type,
+            )
+
+            if critique is None:
+                # 평가 자체가 실패하면 기본 검증만 통과한 result 반환
+                print(f"  [Q&A] G-Eval 평가 호출 실패 — 기본 검증만 통과한 결과 사용")
+                return result
+
+            print(f"  [Q&A] 시도 {attempt+1} {format_critique_log(critique)}")
+
+            # 최고 점수 후보 보존 (모두 실패 시 fallback)
+            if critique.average > best_score_avg:
+                best_score_avg = critique.average
+                best_result = result
+
+            if is_qa_passing(critique):
+                return result
+
+            # Fail → feedback을 다음 시도에 주입
+            refine_feedback = (
+                f"G-Eval 평균 {critique.average:.2f}점 (기준 {CRITIC_THRESHOLD}점 미달). "
+                f"개선 요청: {critique.feedback}"
+            )
 
         except Exception as e:
             print(f"  [Q&A] 시도 {attempt+1}/{max_outer_retries} 예외: {str(e)[:120]}")
+            refine_feedback = None  # 예외 시 피드백 리셋
             continue
 
-    print(f"  [Q&A] 모든 재시도 실패")
+    # 모든 재시도 실패 → 최고점 결과라도 반환 (없으면 None)
+    if best_result is not None:
+        print(f"  [Q&A] 모든 재시도 fail. 최고 avg={best_score_avg:.2f} 결과 채택")
+        return best_result
+
+    print(f"  [Q&A] 모든 재시도 완전 실패")
     return None
 
 
@@ -281,10 +377,13 @@ def generate_qa_multi_chunk(
     rare_tokens: list[str],
     bloom_type: str,
     max_outer_retries: int = 3,
+    use_geval: bool = True,
 ) -> QAResult | None:
     """
-    2~3개 청크를 결합해 단일 청크로는 답할 수 없는 Q&A를 1개 생성.
+    2~3개 청크를 결합해 단일 청크로 답할 수 없는 Q&A 1개 생성.
     bloom_type은 '비교' 또는 '분석'만 허용.
+
+    G-Eval critique-refine loop 적용 (use_geval=True).
     """
     if bloom_type not in MULTI_BLOOM_DESCS:
         print(f"  [Multi-Q&A] 허용되지 않은 bloom_type='{bloom_type}'")
@@ -295,6 +394,7 @@ def generate_qa_multi_chunk(
 
     chunks_clean = [_normalize_korean_spaces(c) for _, c in chunks_with_idx]
     combined_norm = "".join(_normalize_for_match(c) for c in chunks_clean)
+    combined_chunk_text = "\n\n---\n\n".join(chunks_clean)
 
     chunk_tokens: list[str] = []
     for c in chunks_clean:
@@ -316,29 +416,47 @@ def generate_qa_multi_chunk(
         )
 
     system_msg = (
-        "당신은 문서 기반 평가 데이터셋을 만드는 한국어 전문가입니다. "
-        "여러 청크를 모두 고려한 통합적 사고가 필요한 Q&A를 만듭니다. "
-        "출력은 반드시 한국어와 영문 약어/고유명사로만 구성하며, "
-        "그 외 언어(태국어, 중국어, 일본어 등)는 절대 사용하지 않습니다."
+        "당신은 한국어 문서 기반 평가 데이터셋을 만드는 전문가입니다. "
+        "여러 청크를 모두 고려한 통합적 사고가 필요한 Q&A를 만듭니다.\n"
+        "[언어 규칙 — 절대 위반 금지]\n"
+        "• question, answer 본문은 **반드시 한국어**로 작성. 영문 전체 문장 금지.\n"
+        "• 영문은 약어/고유명사 또는 청크에 영문으로 그대로 등장하는 표현에만 허용.\n"
+        "• 다른 언어(중국어/일본어/태국어 등) 절대 사용 금지.\n"
+        "[답변 정확성]\n"
+        "• 답변의 모든 사실/수치/예시는 청크에 명시적으로 존재해야 함. "
+        "청크에 없는 예시·인용을 만들어 넣지 마라."
     )
 
-    user_prompt = (
-        f"[문서 도메인]: {category}\n\n"
-        f"[질문 유형]: {bloom_type}\n[유형 설명]: {bloom_desc}\n\n"
-        f"[제공된 청크 — 반드시 둘 이상 활용하라]\n{chunks_text}\n"
-        f"{anchor_hint}\n"
-        "필수 규칙:\n"
-        f"1. bloom_type: 정확히 '{bloom_type}'\n"
-        "2. 질문과 답변은 **여러 청크의 정보를 결합**해야 한다. 단일 청크로 답 가능한 질문 금지.\n"
-        "3. 답변에는 청크들에 등장하는 구체적 사실/수치/명칭을 포함하라.\n"
-        "4. 답변은 질문의 단순 변형이면 안 된다 (동어반복 금지).\n"
-        "5. 메타 표현 금지 ('이 문서', '위 글', '청크 #N' 등 직접 호명 금지).\n"
-        "6. 외부 지식, 추측 금지 — 청크들 안에 답이 있어야 함.\n"
-        "7. 출력 언어: 한국어와 영문 약어/고유명사만.\n"
-        "8. anchor_used: 활용한 핵심 키워드 또는 null.\n"
-        "9. **answer_quote**: 답변의 핵심 근거 한 문장을 **청크들 중 한 곳에서 글자 그대로 인용** "
-        "(5자 이상, 변형/축약 금지)."
-    )
+    def _build_user_prompt(refine_feedback: str | None) -> str:
+        refine_block = ""
+        if refine_feedback:
+            refine_block = (
+                "\n[직전 시도에 대한 G-Eval 평가 피드백 — 이번엔 반드시 개선하라]\n"
+                f"{refine_feedback}\n"
+            )
+        return (
+            f"[문서 도메인]: {category}\n\n"
+            f"[질문 유형]: {bloom_type}\n[유형 설명]: {bloom_desc}\n\n"
+            f"[제공된 청크 — 반드시 둘 이상 활용하라]\n{chunks_text}\n"
+            f"{anchor_hint}"
+            f"{refine_block}\n"
+            "필수 규칙:\n"
+            f"1. bloom_type: 정확히 '{bloom_type}'\n"
+            "2. **question은 한국어 의문문**, **answer는 한국어 서술문**.\n"
+            "3. 질문과 답변은 **여러 청크의 정보를 결합**해야 한다. 단일 청크로 답 가능한 질문 금지.\n"
+            "4. 답변에 청크들에 등장하는 구체적 사실/수치/명칭을 포함하라.\n"
+            "5. 답변은 질문의 단순 변형이면 안 된다 (동어반복 금지).\n"
+            "6. 메타 표현 금지 ('이 문서', '위 글', '청크 #N' 등 직접 호명 금지).\n"
+            "7. **외부 지식/추측 금지** — 청크에 없는 예시·인용·수치를 만들어 넣지 마라.\n"
+            "8. anchor_used: 활용한 핵심 키워드 또는 null.\n"
+            "9. **answer_quote**: 답변의 핵심 근거 문장을 청크들 중 한 곳에서 글자 그대로 인용 "
+            "(가능하면 **완결된 한 문장**, 짧은 헤더/항목 번호만 인용 금지). "
+            "변형/축약 금지."
+        )
+
+    refine_feedback: str | None = None
+    best_result: QAResult | None = None
+    best_score_avg: float = -1.0
 
     for attempt in range(max_outer_retries):
         try:
@@ -346,7 +464,7 @@ def generate_qa_multi_chunk(
                 model=_MODEL,
                 messages=[
                     {"role": "system", "content": system_msg},
-                    {"role": "user", "content": user_prompt},
+                    {"role": "user", "content": _build_user_prompt(refine_feedback)},
                 ],
                 response_model=QAResult,
                 max_retries=2,
@@ -355,6 +473,7 @@ def generate_qa_multi_chunk(
 
             if result.bloom_type != bloom_type:
                 print(f"  [Multi-Q&A] bloom_type 불일치 '{result.bloom_type}' (시도 {attempt+1})")
+                refine_feedback = f"bloom_type을 정확히 '{bloom_type}'로 적어라."
                 continue
 
             quote_norm = _normalize_for_match(result.answer_quote)
@@ -363,21 +482,60 @@ def generate_qa_multi_chunk(
                     f"  [Multi-Q&A] Citation 실패 (시도 {attempt+1}): "
                     f"quote='{result.answer_quote[:50]}...'"
                 )
+                refine_feedback = (
+                    "answer_quote가 어떤 청크에도 없음. 청크들 중 한 곳의 문장을 글자 그대로 인용하라."
+                )
                 continue
 
             try:
                 _check_qa_distinct(result)
             except ValueError as ve:
                 print(f"  [Multi-Q&A] 동어반복 (시도 {attempt+1}): {ve}")
+                refine_feedback = (
+                    "답변이 질문의 단순 변형이다. 청크들의 구체적 사실/수치/명칭을 답변에 포함하라."
+                )
                 continue
 
-            return result
+            # G-Eval critique
+            if not use_geval:
+                return result
+
+            critique = critique_qa(
+                question=result.question,
+                answer=result.answer,
+                answer_quote=result.answer_quote,
+                chunk=combined_chunk_text,
+                bloom_type=result.bloom_type,
+            )
+
+            if critique is None:
+                print(f"  [Multi-Q&A] G-Eval 호출 실패 — 기본 검증만 통과한 결과 사용")
+                return result
+
+            print(f"  [Multi-Q&A] 시도 {attempt+1} {format_critique_log(critique)}")
+
+            if critique.average > best_score_avg:
+                best_score_avg = critique.average
+                best_result = result
+
+            if is_qa_passing(critique):
+                return result
+
+            refine_feedback = (
+                f"G-Eval 평균 {critique.average:.2f}점 (기준 {CRITIC_THRESHOLD}점 미달). "
+                f"개선 요청: {critique.feedback}"
+            )
 
         except Exception as e:
             print(f"  [Multi-Q&A] 시도 {attempt+1}/{max_outer_retries} 예외: {str(e)[:120]}")
+            refine_feedback = None
             continue
 
-    print(f"  [Multi-Q&A] 모든 재시도 실패")
+    if best_result is not None:
+        print(f"  [Multi-Q&A] 모든 재시도 fail. 최고 avg={best_score_avg:.2f} 결과 채택")
+        return best_result
+
+    print(f"  [Multi-Q&A] 모든 재시도 완전 실패")
     return None
 
 

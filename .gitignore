@@ -22,6 +22,12 @@ backend/vector_db/
 *.bin
 *.zip
 
+# 런타임 산출물 (DB / 캐시 / 업로드 / 평가 출력)
+backend/capstone.db
+backend/.cache/
+backend/uploaded_pdf/
+backend/sanity_answers.csv
+
 # [OS]
 # 운영체제에서 자동 생성하는 임시 파일
 .DS_Store
