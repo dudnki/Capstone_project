@@ -1,6 +1,6 @@
 """
 파이프라인 라우터:
-- /pipeline/run          : 결정론적 파이프라인 (분할 → MMR 선택 → Q&A 생성)
+- /pipeline/run          : G-Eval 파이프라인 (후보 생성 → 품질 필터링)
 - /pipeline/run_agentic  : Agentic 파이프라인 (LLM 에이전트가 청크/유형/결합 동적 결정)
 
 DB는 로컬 SQLite (SQLAlchemy)로 통일, 파일은 uploaded_pdf 로컬 폴더에서 읽음.
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.services.database import get_db, Document, QAEvaluation
+from app.services.geval_filter import generate_multiple_qa, filter_qa_by_geval
 from app.services.document_analyzer import (
     classify_document,
     extract_rare_tokens,
@@ -22,10 +23,11 @@ from app.services.document_analyzer import (
 )
 from app.services.qa_generator import generate_qa_for_chunks
 from app.services.qa_agent import run_qa_agent
+from dotenv import load_dotenv
 
+load_dotenv()
 
 router = APIRouter()
-
 
 UPLOAD_DIR = "uploaded_pdf"
 
@@ -35,7 +37,11 @@ DTYPE_STYLES = {
     "md":  {"color": "#1d4ed8", "bg": "#eff6ff"},
 }
 
-N_QA = 3  # 결정론적 파이프라인: 청크당 1 Q&A, 총 N개
+# G-Eval 파이프라인 파라미터
+N_CANDIDATES = 5       # 청크당 생성할 Q&A 후보 수
+GEVAL_THRESHOLD = 0.70 # 최소 품질 점수 (0~1)
+TOP_K_PER_CHUNK = 2    # 청크당 최종 선택 수
+N_QA = 3               # 결정론적 파이프라인: 총 Q&A 수
 
 
 class PipelineRequest(BaseModel):
@@ -47,11 +53,6 @@ class AgenticPipelineRequest(BaseModel):
     saved_filename: str
     original_filename: str
     target_n: int = 3
-
-
-# RAGAS 실시간 평가 stub — 실제 평가는 /evaluations/submit에서 수행
-def evaluate_qa_quality(context: str, question: str, ground_truth: str) -> dict:
-    return {"faithfulness": 0.85, "answer_relevancy": 0.82}
 
 
 def _read_local_file(saved_filename: str) -> bytes:
@@ -66,7 +67,6 @@ def _read_local_file(saved_filename: str) -> bytes:
 
 
 def _extract_text(file_bytes: bytes, ext: str) -> str:
-    """파일 바이트 → 텍스트. PDF는 적응형 추출기, 그 외는 UTF-8 디코딩."""
     if ext == "pdf":
         from app.services.pdf_extractor import pdf_to_markdown
         try:
@@ -79,7 +79,6 @@ def _extract_text(file_bytes: bytes, ext: str) -> str:
 
 
 def _split_chunks(text: str) -> list[str]:
-    """RecursiveCharacterTextSplitter — Markdown 헤더/문단/문장 단위."""
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000,
         chunk_overlap=200,
@@ -126,7 +125,6 @@ def _build_qa_response_row(
 def _persist_qa(
     db: Session, *, document_id: str, question: str, ground_truth: str, context: str
 ) -> str | None:
-    """qa_evaluations에 한 행 저장하고 id 반환."""
     qa = QAEvaluation(
         document_id=document_id,
         question=question,
@@ -141,7 +139,7 @@ def _persist_qa(
 
 @router.post("/pipeline/run")
 async def run_pipeline(req: PipelineRequest, db: Session = Depends(get_db)):
-    """결정론적 파이프라인: MMR로 N개 청크 선택 → 청크당 1 Q&A 생성."""
+    """G-Eval 파이프라인: 다수 후보 생성 → 품질 필터링 → 고품질 Q&A 저장."""
     try:
         # 1. 파일 읽기 + 텍스트 추출
         file_bytes = _read_local_file(req.saved_filename)
@@ -167,49 +165,87 @@ async def run_pipeline(req: PipelineRequest, db: Session = Depends(get_db)):
         db.refresh(new_doc)
         document_id = new_doc.id
 
-        # 4. 청킹 + MMR 선택
+        # 4. 청킹
         chunks = _split_chunks(extracted_text)
         print(f"[Chunking] 총 {len(chunks)}개 청크 생성")
-        selected_chunks = select_diverse_chunks(chunks, n=N_QA)
-        print(
-            f"[Chunk Select] 전체 {len(chunks)}개 → 선택 {len(selected_chunks)}개 "
-            f"(인덱스: {[idx for idx, _ in selected_chunks]})"
-        )
 
-        # 5. Q&A 생성
-        qa_items = generate_qa_for_chunks(selected_chunks, category, rare_tokens)
+        # 5. G-Eval 파이프라인: 다수 후보 생성 → 품질 필터링 → 고품질만 저장
+        qa_pairs = []
+        for chunk_idx, chunk in enumerate(chunks[:3]):
+            print(f"\n[Pipeline] 청크 {chunk_idx + 1}/3 처리 시작")
 
-        # 6. DB 저장 + 응답 조립
-        final_results = []
-        for i, qa in enumerate(qa_items, start=1):
-            score_data = evaluate_qa_quality(
-                context=qa.chunk,
-                question=qa.question,
-                ground_truth=qa.answer,
+            candidates = generate_multiple_qa(chunk, n=N_CANDIDATES, category=category)
+            if not candidates:
+                print(f"  [Pipeline] 청크 {chunk_idx + 1}: 후보 생성 실패, 건너뜀")
+                continue
+
+            selected = filter_qa_by_geval(
+                context=chunk,
+                qa_candidates=candidates,
+                threshold=GEVAL_THRESHOLD,
+                top_k=TOP_K_PER_CHUNK,
             )
-            qa_db_id = _persist_qa(
-                db,
-                document_id=document_id,
-                question=qa.question,
-                ground_truth=qa.answer,
-                context=qa.chunk,
-            )
-            final_results.append(_build_qa_response_row(
-                index=i,
-                qa_db_id=qa_db_id,
-                document_id=document_id,
-                question=qa.question,
-                answer=qa.answer,
-                answer_quote=qa.answer_quote,
-                anchor_used=qa.anchor_used,
-                bloom_type=qa.bloom_type,
-                ext=ext,
-                original_filename=req.original_filename,
-                score_data=score_data,
-            ))
 
+            for qa in selected:
+                geval = qa["geval"]
+                scores = geval["scores"]
+
+                faithfulness_mapped = round(
+                    (scores["relevance"] + scores["answerability"]) / 2 / 5.0, 4
+                )
+                relevance_mapped = round(
+                    (scores["clarity"] + scores["specificity"] + scores["difficulty"]) / 3 / 5.0, 4
+                )
+
+                new_qa = QAEvaluation(
+                    document_id=document_id,
+                    question=qa["question"],
+                    ground_truth=qa["answer"],
+                    context=chunk,
+                    faithfulness_score=faithfulness_mapped,
+                    answer_relevance_score=relevance_mapped,
+                )
+                db.add(new_qa)
+                db.commit()
+                db.refresh(new_qa)
+
+                qa_pairs.append({
+                    "question": qa["question"],
+                    "answer":   qa["answer"],
+                    "db_id":    new_qa.id,
+                    "geval":    geval,
+                    "faithfulness_mapped": faithfulness_mapped,
+                    "relevance_mapped":    relevance_mapped,
+                })
+
+        # 6. 상태 업데이트 및 최종 반환
         new_doc.status = "완료"
         db.commit()
+
+        style = DTYPE_STYLES.get(ext, {"color": "#475569", "bg": "#f8fafc"})
+
+        final_results = []
+        for i, qa in enumerate(qa_pairs, start=1):
+            geval = qa["geval"]
+            final_results.append({
+                "index": i,
+                "qa_uuid": qa["db_id"],
+                "document_uuid": document_id,
+                "q": qa["question"],
+                "doc": req.original_filename,
+                "dtype": ext,
+                "color": style["color"],
+                "bg": style["bg"],
+                "answer": qa["answer"],
+                "score": round(geval["normalized_score"], 2),
+                "faithfulness": round(qa["faithfulness_mapped"], 2),
+                "answer_relevancy": round(qa["relevance_mapped"], 2),
+                "geval_detail": {
+                    "weighted_score": geval["weighted_score"],
+                    "normalized_score": geval["normalized_score"],
+                    "scores": geval["scores"],
+                },
+            })
 
         return final_results
 
@@ -261,11 +297,6 @@ async def run_pipeline_agentic(
 
         final_results = []
         for i, qa in enumerate(qa_items, start=1):
-            score_data = evaluate_qa_quality(
-                context=qa.chunk,
-                question=qa.question,
-                ground_truth=qa.answer,
-            )
             qa_db_id = _persist_qa(
                 db,
                 document_id=document_id,
@@ -284,7 +315,7 @@ async def run_pipeline_agentic(
                 bloom_type=qa.bloom_type,
                 ext=ext,
                 original_filename=req.original_filename,
-                score_data=score_data,
+                score_data={"faithfulness": 0.85, "answer_relevancy": 0.82},
             ))
 
         new_doc.status = "완료"

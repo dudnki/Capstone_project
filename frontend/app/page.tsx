@@ -389,7 +389,8 @@ export default function RagEvaluationPage() {
         body: JSON.stringify({
           saved_filename:    savedFilename,
           original_filename: resultFile.name,
-          document_id:       currentDocumentId, // ✅ 핵심 추가
+          document_id:       currentDocumentId,
+          mode:              pipelineMode,
         }),
       });
 
