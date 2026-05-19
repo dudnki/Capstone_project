@@ -238,8 +238,8 @@ export default function RagEvaluationPage() {
     const uploadData = await uploadRes.json();
     const savedFilename: string = uploadData.saved_filename;
 
-    // ── STEP 2. 파이프라인 실행 ───────────────────────────
-    const pipelineRes = await fetch(`${BASE_URL}/api/pipeline/run`, {
+    // ── STEP 2. 파이프라인 실행 (agentic 채택) ───────────────────────────
+    const pipelineRes = await fetch(`${BASE_URL}/api/pipeline/run_agentic`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -15,4 +15,5 @@ dependencies = [
 [tool.uv]
 dev-dependencies = [
     "pytest>=8.0.0",
+    "tiktoken>=0.13.0",
 ]
