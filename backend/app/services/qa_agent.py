@@ -303,14 +303,15 @@ def tool_generate_qa_single(
     if not matching:
         return {"error": f"bloom_type='{bloom_type}'는 single용이 아님"}
 
-    qa = generate_qa_for_chunk(chunk, state.category, state.rare_tokens, matching)
-    if qa is None:
+    qa_list = generate_qa_for_chunk(chunk, state.category, state.rare_tokens, matching)
+    if not qa_list:
         state.failed_chunk_indices.add(chunk_idx)
         return {
             "success": False,
-            "reason": "검증 통과 실패 (citation/언어/길이/동어반복). 다른 청크 또는 다른 유형 권장.",
+            "reason": "Best-of-N 모두 검증/점수 미달. 다른 청크 또는 다른 유형 권장.",
             "collected_so_far": len(state.qa_items),
         }
+    qa = qa_list[0]  # top_k=1
 
     state.used_chunk_indices.add(chunk_idx)
     state.qa_items.append(QAItem(
@@ -350,15 +351,16 @@ def tool_generate_qa_multi(
             return {"error": f"chunk_idx={idx}는 유효하지 않음"}
         pairs.append((idx, chunk))
 
-    qa = generate_qa_multi_chunk(pairs, state.category, state.rare_tokens, bloom_type)
-    if qa is None:
+    qa_list = generate_qa_multi_chunk(pairs, state.category, state.rare_tokens, bloom_type)
+    if not qa_list:
         for idx in chunk_indices:
             state.failed_chunk_indices.add(idx)
         return {
             "success": False,
-            "reason": "멀티 청크 Q&A 생성 실패. 다른 조합 또는 단일 청크 시도 권장.",
+            "reason": "멀티 청크 Best-of-N 모두 검증/점수 미달. 다른 조합 또는 단일 청크 시도 권장.",
             "collected_so_far": len(state.qa_items),
         }
+    qa = qa_list[0]  # top_k=1
 
     main_idx, _ = pairs[0]
     for idx in chunk_indices:

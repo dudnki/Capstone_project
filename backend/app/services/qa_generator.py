@@ -15,16 +15,28 @@ from __future__ import annotations
 import os
 import re
 
-from groq import Groq
+from openai import OpenAI
 from pydantic import BaseModel, field_validator
 import instructor
 
+from app.services.qa_critic import (
+    critique_qa,
+    is_qa_passing,
+    format_critique_log,
+    CritiqueScore,
+    THRESHOLD as CRITIC_THRESHOLD,
+    MIN_PER_DIM as CRITIC_MIN_PER_DIM,
+)
+
 
 # ---------- 설정 ----------
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-_groq_client = Groq(api_key=GROQ_API_KEY)
-_instructor_client = instructor.from_groq(_groq_client)
-_MODEL = "llama-3.3-70b-versatile"
+# Generator: gpt-4o-mini (빠르고 instruction-following 안정적).
+# Critic은 qa_critic.py에서 gpt-4o 사용 — 두 모델 분리하여 self-bias 제거
+# (Zheng et al. 2024, "LLM-as-a-Judge").
+_OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+_openai_client = OpenAI(api_key=_OPENAI_API_KEY)
+_instructor_client = instructor.from_openai(_openai_client)
+_MODEL = "gpt-4o-mini"
 
 
 # Bloom Taxonomy 기반 질문 유형
@@ -156,8 +168,9 @@ def _build_prompt(
     category: str,
     chunk_tokens: list[str],
     available_types: list[tuple[str, str]],
+    refine_feedback: str | None = None,
 ) -> tuple[str, str]:
-    """system_msg, user_prompt 반환."""
+    """system_msg, user_prompt 반환. refine_feedback 있으면 재생성용 개선 지시 추가."""
     types_text = "\n".join(f"- {name}: {desc}" for name, desc in available_types)
     allowed_names = [name for name, _ in available_types]
 
@@ -168,33 +181,91 @@ def _build_prompt(
             f"{', '.join(chunk_tokens)}\n"
         )
 
+    refine_block = ""
+    if refine_feedback:
+        refine_block = (
+            "\n[직전 시도에 대한 G-Eval 평가 피드백 — 이번엔 반드시 개선하라]\n"
+            f"{refine_feedback}\n"
+        )
+
     system_msg = (
-        "당신은 문서 기반 평가 데이터셋을 만드는 한국어 전문가입니다. "
-        "출력은 반드시 한국어와 영문 약어/고유명사로만 구성하며, "
-        "그 외 언어(태국어, 중국어, 일본어 등)는 절대 사용하지 않습니다. "
-        "답변은 청크에 있는 구체적 사실/수치/근거를 포함해야 하며, "
-        "그 근거가 되는 문장을 answer_quote에 글자 그대로 인용해야 합니다."
+        "당신은 한국어 문서 기반 평가 데이터셋을 만드는 전문가입니다.\n"
+        "[언어 규칙 — 절대 위반 금지]\n"
+        "• question, answer 본문은 **반드시 한국어**로 작성한다. 영문 전체 문장으로 작성 금지.\n"
+        "• 영문은 다음 경우에만 허용: (a) 약어/고유명사 (예: LoRA, PiSSA, GSM8K, RFID), "
+        "(b) 청크에 영문으로 그대로 등장하는 표현. 그 외엔 영문 사용 금지.\n"
+        "• 다른 언어(중국어/일본어/태국어 등) 절대 사용 금지.\n"
+        "[답변 정확성]\n"
+        "• 답변에 들어가는 모든 사실/수치/예시는 **청크에 명시적으로 존재**해야 한다. "
+        "청크에 없는 예시·인용·수치를 임의로 만들어 넣지 마라 (특히 영문 참고문헌 등).\n"
+        "• 근거 문장은 answer_quote에 청크 원문 그대로 인용한다."
     )
 
     user_prompt = (
         f"[문서 도메인]: {category}\n\n"
         f"[사용 가능한 질문 유형]\n{types_text}\n\n"
         "위 유형 중 청크 내용에 가장 자연스럽게 맞는 것 1개를 골라 그 유형의 Q&A를 만들어라.\n"
-        f"{anchor_hint}\n"
+        f"{anchor_hint}"
+        f"{refine_block}\n"
         f"[청크 내용]\n{chunk_clean}\n\n"
         "필수 규칙:\n"
         f"1. bloom_type: 다음 중 하나를 정확한 표기로: {', '.join(allowed_names)}\n"
-        "2. 답변에는 청크에 등장하는 구체적 사실/수치/명칭을 포함하라.\n"
-        "3. 답변은 질문의 단순 변형이면 안 된다 (동어반복 금지).\n"
-        "4. 메타 표현 금지 ('이 문서', '위 글' 등).\n"
-        "5. 핵심 키워드가 청크에 있으면 자연스럽게 활용 (강제 아님).\n"
-        "6. 외부 지식, 추측 금지 — 청크 안에 답이 명확히 있어야 함.\n"
-        "7. 출력 언어: 한국어와 영문 약어/고유명사만.\n"
-        "8. anchor_used: 활용한 핵심 키워드 또는 null.\n"
-        "9. **answer_quote**: 답변의 근거가 되는 청크의 문장을 **글자 그대로 인용** "
-        "(5자 이상, 변형/축약 금지). 청크에 실제 등장하는 문장이어야 함."
+        "2. **question은 한국어 의문문**으로 작성 (영문 전체 문장 금지).\n"
+        "3. **answer는 한국어 서술문**으로 작성. 영문은 약어/고유명사/청크 인용에만 허용.\n"
+        "4. 답변에 청크에 등장하는 구체적 사실/수치/명칭을 포함하라.\n"
+        "5. 답변은 질문의 단순 변형이면 안 된다 (동어반복 금지).\n"
+        "6. 메타 표현 금지 ('이 문서', '위 글' 등).\n"
+        "7. 핵심 키워드가 청크에 있으면 자연스럽게 활용 (강제 아님).\n"
+        "8. **외부 지식/추측 금지** — 청크에 없는 예시·인용·수치를 만들어 넣지 마라.\n"
+        "9. anchor_used: 활용한 핵심 키워드 또는 null.\n"
+        "10. **answer_quote**: 답변의 핵심 근거 문장을 청크에서 글자 그대로 인용 "
+        "(가능하면 **완결된 한 문장**, 단순 항목 번호나 짧은 헤더만 인용하지 말 것). "
+        "변형/축약 금지, 청크에 실제 등장해야 함."
     )
     return system_msg, user_prompt
+
+
+def _generate_one_candidate(
+    chunk_clean: str,
+    category: str,
+    chunk_tokens: list[str],
+    available_types: list[tuple[str, str]],
+    chunk_norm_for_match: str,
+    allowed_names: list[str],
+    refine_feedback: str | None,
+) -> QAResult | None:
+    """단일 후보 생성 + 하드 필터(bloom/citation/동어반복). 통과하면 QAResult, 아니면 None."""
+    system_msg, user_prompt = _build_prompt(
+        chunk_clean, category, chunk_tokens, available_types,
+        refine_feedback=refine_feedback,
+    )
+    try:
+        result: QAResult = _instructor_client.chat.completions.create(
+            model=_MODEL,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_model=QAResult,
+            max_retries=2,
+            temperature=0.5,  # best-of-N 다양성을 위해 약간 상향
+        )
+    except Exception as e:
+        print(f"    [후보] Pydantic/생성 실패: {str(e)[:100]}")
+        return None
+
+    if result.bloom_type not in allowed_names:
+        print(f"    [후보] bloom_type 불일치='{result.bloom_type}'")
+        return None
+    if _normalize_for_match(result.answer_quote) not in chunk_norm_for_match:
+        print(f"    [후보] Citation 실패: quote='{result.answer_quote[:50]}...'")
+        return None
+    try:
+        _check_qa_distinct(result)
+    except ValueError as ve:
+        print(f"    [후보] 동어반복: {ve}")
+        return None
+    return result
 
 
 def generate_qa_for_chunk(
@@ -202,59 +273,124 @@ def generate_qa_for_chunk(
     category: str,
     rare_tokens: list[str],
     available_types: list[tuple[str, str]],
-    max_outer_retries: int = 3,
-) -> QAResult | None:
+    n_candidates: int = 3,
+    top_k: int = 1,
+    max_outer_retries: int = 2,
+    use_geval: bool = True,
+) -> list[QAResult]:
     """
-    LLM이 청크 보고 Bloom 유형 선택 + Q&A 생성. 모든 검증 통과한 결과만 반환.
+    Best-of-N + top-K 방식 Q&A 생성.
+
+    각 라운드:
+      1) N개 후보 생성 (각각 Pydantic + bloom_type + Citation + 동어반복 통과)
+      2) (use_geval=True) 각 후보에 G-Eval critique (logprob 가중 점수)
+      3) THRESHOLD/MIN_PER_DIM 통과자 중 weighted_score 내림차순 top_k 반환
+      4) 통과자 부족 시 가장 약한 후보의 feedback을 다음 라운드에 주입
+
+    모든 라운드 후에도 top_k 통과자 부족 → 누적 후보 중 weighted_score 상위 top_k 반환 (폴백)
+
+    Args:
+        n_candidates: 라운드당 후보 수 (기본 3)
+        top_k: 최종 반환 개수 (기본 1)
+        max_outer_retries: 라운드 수 (기본 2)
+        use_geval: G-Eval critique 사용 여부
+
+    Returns:
+        QAResult 리스트 (길이 0~top_k)
     """
     chunk_clean = _normalize_korean_spaces(chunk)
     chunk_tokens = _filter_tokens_for_chunk(rare_tokens, chunk_clean)
     chunk_norm_for_match = _normalize_for_match(chunk_clean)
     allowed_names = [name for name, _ in available_types]
-    system_msg, user_prompt = _build_prompt(chunk_clean, category, chunk_tokens, available_types)
+
+    refine_feedback: str | None = None
+    # 라운드 간 누적 (폴백용)
+    accumulated_scored: list[tuple[QAResult, CritiqueScore]] = []
+    accumulated_unscored: list[QAResult] = []  # critique 실패 후보
 
     for attempt in range(max_outer_retries):
-        try:
-            result: QAResult = _instructor_client.chat.completions.create(
-                model=_MODEL,
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_model=QAResult,
-                max_retries=2,  # Pydantic validator 자동 재시도
-                temperature=0.3,
+        # ---- N개 후보 생성 ----
+        survivors: list[QAResult] = []
+        for c_idx in range(n_candidates):
+            cand = _generate_one_candidate(
+                chunk_clean, category, chunk_tokens, available_types,
+                chunk_norm_for_match, allowed_names, refine_feedback,
             )
+            if cand is not None:
+                survivors.append(cand)
 
-            # bloom_type 허용 검증
-            if result.bloom_type not in allowed_names:
-                print(f"  [Q&A] 잘못된 bloom_type='{result.bloom_type}' (시도 {attempt+1})")
-                continue
-
-            # Citation grounding 검증
-            quote_norm = _normalize_for_match(result.answer_quote)
-            if quote_norm not in chunk_norm_for_match:
-                print(
-                    f"  [Q&A] Citation 실패 (시도 {attempt+1}): "
-                    f"quote='{result.answer_quote[:50]}...'"
-                )
-                continue
-
-            # 동어반복 검증
-            try:
-                _check_qa_distinct(result)
-            except ValueError as ve:
-                print(f"  [Q&A] 동어반복 (시도 {attempt+1}): {ve}")
-                continue
-
-            return result
-
-        except Exception as e:
-            print(f"  [Q&A] 시도 {attempt+1}/{max_outer_retries} 예외: {str(e)[:120]}")
+        if not survivors:
+            print(f"  [Q&A] 라운드 {attempt+1}: 모든 후보 하드필터 탈락")
+            refine_feedback = (
+                "이전 라운드 후보 전원 검증 실패. answer_quote를 청크 문장 그대로 정확히 인용하고, "
+                f"bloom_type은 {allowed_names} 중 하나로, 한국어 의문문 + 동어반복 금지."
+            )
             continue
 
-    print(f"  [Q&A] 모든 재시도 실패")
-    return None
+        print(f"  [Q&A] 라운드 {attempt+1}: 하드필터 통과 {len(survivors)}/{n_candidates}")
+
+        # ---- G-Eval 미사용 시: 첫 라운드 생존자 중 top_k 그대로 반환 ----
+        if not use_geval:
+            return survivors[:top_k]
+
+        # ---- 각 후보 critique ----
+        scored_this_round: list[tuple[QAResult, CritiqueScore]] = []
+        for s_idx, cand in enumerate(survivors):
+            critique = critique_qa(
+                question=cand.question,
+                answer=cand.answer,
+                answer_quote=cand.answer_quote,
+                chunk=chunk_clean,
+                bloom_type=cand.bloom_type,
+            )
+            if critique is None:
+                print(f"  [Q&A] 후보 {s_idx+1} critique 실패 — 폴백 풀에 보관")
+                accumulated_unscored.append(cand)
+                continue
+            print(f"  [Q&A] 후보 {s_idx+1} {format_critique_log(critique)}")
+            scored_this_round.append((cand, critique))
+            accumulated_scored.append((cand, critique))
+
+        if not scored_this_round:
+            refine_feedback = "Critic 호출 모두 실패. 질문/답변을 더 명확한 한국어로 작성하라."
+            continue
+
+        # ---- threshold + min_per_dim 통과자 ----
+        passing = [
+            (c, s) for c, s in scored_this_round if is_qa_passing(s)
+        ]
+        if len(passing) >= top_k:
+            passing.sort(key=lambda x: x[1].weighted_score, reverse=True)
+            selected = [c for c, _ in passing[:top_k]]
+            print(
+                f"  [Q&A] 라운드 {attempt+1} 종료: 통과 {len(passing)}, top_{top_k} 선택"
+            )
+            return selected
+
+        # ---- 통과자 부족 → 가장 약한 후보 feedback로 다음 라운드 ----
+        scored_this_round.sort(key=lambda x: x[1].weighted_score, reverse=True)
+        weakest = scored_this_round[-1][1]
+        refine_feedback = (
+            f"이번 라운드 최고 weighted_score={scored_this_round[0][1].weighted_score:.2f}, "
+            f"통과 {len(passing)}/{top_k}. 약한 차원 개선: {weakest.feedback}"
+        )
+
+    # ---- 폴백: 누적 점수 후보 중 weighted_score top_k ----
+    if accumulated_scored:
+        accumulated_scored.sort(key=lambda x: x[1].weighted_score, reverse=True)
+        selected = [c for c, _ in accumulated_scored[:top_k]]
+        print(
+            f"  [Q&A] threshold 미달 — 누적 {len(accumulated_scored)} 중 weighted top_{len(selected)} 선택"
+        )
+        return selected
+
+    # ---- 최종 폴백: critique 실패한 후보만이라도 ----
+    if accumulated_unscored:
+        print(f"  [Q&A] critique 전부 실패 — 하드필터 통과 후보 1개 채택")
+        return accumulated_unscored[:top_k]
+
+    print("  [Q&A] 완전 실패 — 빈 리스트 반환")
+    return []
 
 
 # ---------- 청크 리스트 일괄 처리 (다양성 강제) ----------
@@ -275,26 +411,116 @@ MULTI_BLOOM_DESCS = {
 }
 
 
+def _build_multi_user_prompt(
+    category: str,
+    bloom_type: str,
+    bloom_desc: str,
+    chunks_text: str,
+    anchor_hint: str,
+    refine_feedback: str | None,
+) -> str:
+    refine_block = ""
+    if refine_feedback:
+        refine_block = (
+            "\n[직전 라운드 G-Eval 피드백 — 이번엔 반드시 개선하라]\n"
+            f"{refine_feedback}\n"
+        )
+    return (
+        f"[문서 도메인]: {category}\n\n"
+        f"[질문 유형]: {bloom_type}\n[유형 설명]: {bloom_desc}\n\n"
+        f"[제공된 청크 — 반드시 둘 이상 활용하라]\n{chunks_text}\n"
+        f"{anchor_hint}"
+        f"{refine_block}\n"
+        "필수 규칙:\n"
+        f"1. bloom_type: 정확히 '{bloom_type}'\n"
+        "2. **question은 한국어 의문문**, **answer는 한국어 서술문**.\n"
+        "3. 질문과 답변은 **여러 청크의 정보를 결합**해야 한다. 단일 청크로 답 가능한 질문 금지.\n"
+        "4. 답변에 청크들에 등장하는 구체적 사실/수치/명칭을 포함하라.\n"
+        "5. 답변은 질문의 단순 변형이면 안 된다 (동어반복 금지).\n"
+        "6. 메타 표현 금지 ('이 문서', '위 글', '청크 #N' 등 직접 호명 금지).\n"
+        "7. **외부 지식/추측 금지** — 청크에 없는 예시·인용·수치를 만들어 넣지 마라.\n"
+        "8. anchor_used: 활용한 핵심 키워드 또는 null.\n"
+        "9. **answer_quote**: 답변의 핵심 근거 문장을 청크들 중 한 곳에서 글자 그대로 인용 "
+        "(가능하면 **완결된 한 문장**, 짧은 헤더/항목 번호만 인용 금지). "
+        "변형/축약 금지."
+    )
+
+
+_MULTI_SYSTEM_MSG = (
+    "당신은 한국어 문서 기반 평가 데이터셋을 만드는 전문가입니다. "
+    "여러 청크를 모두 고려한 통합적 사고가 필요한 Q&A를 만듭니다.\n"
+    "[언어 규칙 — 절대 위반 금지]\n"
+    "• question, answer 본문은 **반드시 한국어**로 작성. 영문 전체 문장 금지.\n"
+    "• 영문은 약어/고유명사 또는 청크에 영문으로 그대로 등장하는 표현에만 허용.\n"
+    "• 다른 언어(중국어/일본어/태국어 등) 절대 사용 금지.\n"
+    "[답변 정확성]\n"
+    "• 답변의 모든 사실/수치/예시는 청크에 명시적으로 존재해야 함. "
+    "청크에 없는 예시·인용을 만들어 넣지 마라."
+)
+
+
+def _generate_one_multi_candidate(
+    bloom_type: str,
+    user_prompt: str,
+    combined_norm: str,
+) -> QAResult | None:
+    """멀티청크 후보 1개 생성 + 하드 필터. 통과하면 QAResult, 아니면 None."""
+    try:
+        result: QAResult = _instructor_client.chat.completions.create(
+            model=_MODEL,
+            messages=[
+                {"role": "system", "content": _MULTI_SYSTEM_MSG},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_model=QAResult,
+            max_retries=2,
+            temperature=0.5,
+        )
+    except Exception as e:
+        print(f"    [Multi 후보] Pydantic/생성 실패: {str(e)[:100]}")
+        return None
+
+    if result.bloom_type != bloom_type:
+        print(f"    [Multi 후보] bloom_type 불일치='{result.bloom_type}'")
+        return None
+    if _normalize_for_match(result.answer_quote) not in combined_norm:
+        print(f"    [Multi 후보] Citation 실패: quote='{result.answer_quote[:50]}...'")
+        return None
+    try:
+        _check_qa_distinct(result)
+    except ValueError as ve:
+        print(f"    [Multi 후보] 동어반복: {ve}")
+        return None
+    return result
+
+
 def generate_qa_multi_chunk(
     chunks_with_idx: list[tuple[int, str]],
     category: str,
     rare_tokens: list[str],
     bloom_type: str,
-    max_outer_retries: int = 3,
-) -> QAResult | None:
+    n_candidates: int = 3,
+    top_k: int = 1,
+    max_outer_retries: int = 2,
+    use_geval: bool = True,
+) -> list[QAResult]:
     """
-    2~3개 청크를 결합해 단일 청크로는 답할 수 없는 Q&A를 1개 생성.
+    2~3개 청크를 결합한 멀티청크 Q&A 생성 (best-of-N + top-K).
     bloom_type은 '비교' 또는 '분석'만 허용.
+
+    Returns:
+        QAResult 리스트 (길이 0~top_k)
     """
     if bloom_type not in MULTI_BLOOM_DESCS:
         print(f"  [Multi-Q&A] 허용되지 않은 bloom_type='{bloom_type}'")
-        return None
+        return []
     if not (2 <= len(chunks_with_idx) <= 3):
         print(f"  [Multi-Q&A] 청크 개수는 2~3개여야 함 (입력: {len(chunks_with_idx)})")
-        return None
+        return []
 
     chunks_clean = [_normalize_korean_spaces(c) for _, c in chunks_with_idx]
     combined_norm = "".join(_normalize_for_match(c) for c in chunks_clean)
+    combined_chunk_text = "\n\n---\n\n".join(chunks_clean)
 
     chunk_tokens: list[str] = []
     for c in chunks_clean:
@@ -315,70 +541,85 @@ def generate_qa_multi_chunk(
             f"{', '.join(chunk_tokens)}\n"
         )
 
-    system_msg = (
-        "당신은 문서 기반 평가 데이터셋을 만드는 한국어 전문가입니다. "
-        "여러 청크를 모두 고려한 통합적 사고가 필요한 Q&A를 만듭니다. "
-        "출력은 반드시 한국어와 영문 약어/고유명사로만 구성하며, "
-        "그 외 언어(태국어, 중국어, 일본어 등)는 절대 사용하지 않습니다."
-    )
-
-    user_prompt = (
-        f"[문서 도메인]: {category}\n\n"
-        f"[질문 유형]: {bloom_type}\n[유형 설명]: {bloom_desc}\n\n"
-        f"[제공된 청크 — 반드시 둘 이상 활용하라]\n{chunks_text}\n"
-        f"{anchor_hint}\n"
-        "필수 규칙:\n"
-        f"1. bloom_type: 정확히 '{bloom_type}'\n"
-        "2. 질문과 답변은 **여러 청크의 정보를 결합**해야 한다. 단일 청크로 답 가능한 질문 금지.\n"
-        "3. 답변에는 청크들에 등장하는 구체적 사실/수치/명칭을 포함하라.\n"
-        "4. 답변은 질문의 단순 변형이면 안 된다 (동어반복 금지).\n"
-        "5. 메타 표현 금지 ('이 문서', '위 글', '청크 #N' 등 직접 호명 금지).\n"
-        "6. 외부 지식, 추측 금지 — 청크들 안에 답이 있어야 함.\n"
-        "7. 출력 언어: 한국어와 영문 약어/고유명사만.\n"
-        "8. anchor_used: 활용한 핵심 키워드 또는 null.\n"
-        "9. **answer_quote**: 답변의 핵심 근거 한 문장을 **청크들 중 한 곳에서 글자 그대로 인용** "
-        "(5자 이상, 변형/축약 금지)."
-    )
+    refine_feedback: str | None = None
+    accumulated_scored: list[tuple[QAResult, CritiqueScore]] = []
+    accumulated_unscored: list[QAResult] = []
 
     for attempt in range(max_outer_retries):
-        try:
-            result: QAResult = _instructor_client.chat.completions.create(
-                model=_MODEL,
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_model=QAResult,
-                max_retries=2,
-                temperature=0.3,
+        user_prompt = _build_multi_user_prompt(
+            category, bloom_type, bloom_desc, chunks_text, anchor_hint, refine_feedback,
+        )
+
+        survivors: list[QAResult] = []
+        for _ in range(n_candidates):
+            cand = _generate_one_multi_candidate(bloom_type, user_prompt, combined_norm)
+            if cand is not None:
+                survivors.append(cand)
+
+        if not survivors:
+            print(f"  [Multi-Q&A] 라운드 {attempt+1}: 모든 후보 하드필터 탈락")
+            refine_feedback = (
+                f"이전 라운드 후보 전원 검증 실패. answer_quote를 청크 문장 그대로 인용하고, "
+                f"bloom_type='{bloom_type}', 여러 청크 정보를 결합한 한국어 질문/답변 작성."
             )
-
-            if result.bloom_type != bloom_type:
-                print(f"  [Multi-Q&A] bloom_type 불일치 '{result.bloom_type}' (시도 {attempt+1})")
-                continue
-
-            quote_norm = _normalize_for_match(result.answer_quote)
-            if quote_norm not in combined_norm:
-                print(
-                    f"  [Multi-Q&A] Citation 실패 (시도 {attempt+1}): "
-                    f"quote='{result.answer_quote[:50]}...'"
-                )
-                continue
-
-            try:
-                _check_qa_distinct(result)
-            except ValueError as ve:
-                print(f"  [Multi-Q&A] 동어반복 (시도 {attempt+1}): {ve}")
-                continue
-
-            return result
-
-        except Exception as e:
-            print(f"  [Multi-Q&A] 시도 {attempt+1}/{max_outer_retries} 예외: {str(e)[:120]}")
             continue
 
-    print(f"  [Multi-Q&A] 모든 재시도 실패")
-    return None
+        print(f"  [Multi-Q&A] 라운드 {attempt+1}: 하드필터 통과 {len(survivors)}/{n_candidates}")
+
+        if not use_geval:
+            return survivors[:top_k]
+
+        scored_this_round: list[tuple[QAResult, CritiqueScore]] = []
+        for s_idx, cand in enumerate(survivors):
+            critique = critique_qa(
+                question=cand.question,
+                answer=cand.answer,
+                answer_quote=cand.answer_quote,
+                chunk=combined_chunk_text,
+                bloom_type=cand.bloom_type,
+            )
+            if critique is None:
+                print(f"  [Multi-Q&A] 후보 {s_idx+1} critique 실패 — 폴백 풀에 보관")
+                accumulated_unscored.append(cand)
+                continue
+            print(f"  [Multi-Q&A] 후보 {s_idx+1} {format_critique_log(critique)}")
+            scored_this_round.append((cand, critique))
+            accumulated_scored.append((cand, critique))
+
+        if not scored_this_round:
+            refine_feedback = "Critic 호출 모두 실패. 질문/답변을 더 명확한 한국어로 작성하라."
+            continue
+
+        passing = [(c, s) for c, s in scored_this_round if is_qa_passing(s)]
+        if len(passing) >= top_k:
+            passing.sort(key=lambda x: x[1].weighted_score, reverse=True)
+            selected = [c for c, _ in passing[:top_k]]
+            print(
+                f"  [Multi-Q&A] 라운드 {attempt+1} 종료: 통과 {len(passing)}, top_{top_k} 선택"
+            )
+            return selected
+
+        scored_this_round.sort(key=lambda x: x[1].weighted_score, reverse=True)
+        weakest = scored_this_round[-1][1]
+        refine_feedback = (
+            f"이번 라운드 최고 weighted_score={scored_this_round[0][1].weighted_score:.2f}, "
+            f"통과 {len(passing)}/{top_k}. 약한 차원 개선: {weakest.feedback}"
+        )
+
+    if accumulated_scored:
+        accumulated_scored.sort(key=lambda x: x[1].weighted_score, reverse=True)
+        selected = [c for c, _ in accumulated_scored[:top_k]]
+        print(
+            f"  [Multi-Q&A] threshold 미달 — 누적 {len(accumulated_scored)} 중 weighted top_{len(selected)} 선택"
+        )
+        return selected
+
+    if accumulated_unscored:
+        print(f"  [Multi-Q&A] critique 전부 실패 — 하드필터 통과 후보 채택")
+        return accumulated_unscored[:top_k]
+
+    print("  [Multi-Q&A] 완전 실패 — 빈 리스트 반환")
+    return []
 
 
 def generate_qa_for_chunks(
@@ -406,9 +647,10 @@ def generate_qa_for_chunks(
 
         print(f"[Q&A Gen] Chunk #{chunk_idx} (남은 유형: {[t[0] for t in available_types]})")
 
-        qa = generate_qa_for_chunk(chunk, category, rare_tokens, available_types)
-        if not qa:
+        qa_list = generate_qa_for_chunk(chunk, category, rare_tokens, available_types)
+        if not qa_list:
             continue
+        qa = qa_list[0]  # top_k=1 (기본) → 첫 번째 항목
 
         print(f"  유형: {qa.bloom_type}")
         print(f"  Q: {qa.question}")
