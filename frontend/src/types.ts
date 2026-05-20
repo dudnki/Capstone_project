@@ -1,7 +1,9 @@
+export type EvalMode = 'user' | 'model';
+
 export type MenuType = '테스트셋 생성' | '성능 평가';
 
 export type QuestionItem = {
-  id: number;
+  id: string;
   text: string;
 };
 
@@ -12,24 +14,35 @@ export type GeneratedSummary = {
 };
 
 export type EvaluationSummary = {
-  overallScore: number;
-  questionFitScore: number;
-  accuracyScore: number;
-  documentAlignmentScore: number;
   evaluatedCount: number;
+  overallAvgScore: number;
+  faithfulness: number;
+  answerRelevancy: number;
+  answerCorrectness: number;
+  overallFeedback?: {
+    strengths: string;
+    direction: string;
+  };
 };
 
 export type EvaluationRowStatus = 'good' | 'review' | 'poor';
 
 export type EvaluationRow = {
-  id: number;
+  id: string;
   question: string;
   answer: string;
-  questionFitScore: number;
-  accuracyScore: number;
-  documentAlignmentScore: number;
-  overallScore: number;
-  status: EvaluationRowStatus;
+  scores: {
+    faithfulness: number;
+    answer_relevancy: number;
+    answer_correctness: number;
+  };
+  avg_score: number;
+  status?: EvaluationRowStatus;
+  feedback?: {
+    reasoning: string;
+    improvements: string;
+    advice: string;
+  };
 };
 
 export interface EvaluationItem {

@@ -6,6 +6,7 @@ import Sidebar from '../components/Sidebar';
 import DatasetManager from '../components/DatasetManager';
 import EvaluationResult from '../components/EvaluationResult';
 import type {
+  EvalMode,
   MenuType,
   QuestionItem,
   GeneratedSummary,
@@ -19,6 +20,7 @@ const DOCUMENT_EXTENSIONS = ['.pdf', '.xlsx'];
 const RESULT_EXTENSIONS = ['.csv', '.xlsx'];
 
 export default function RagEvaluationPage() {
+  const [evalMode, setEvalMode] = useState<EvalMode | null>(null);
   const [activeMenu, setActiveMenu] = useState<MenuType>('테스트셋 생성');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -71,16 +73,15 @@ export default function RagEvaluationPage() {
 
   const headerStepLabel = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
-      const labels = [
-        '1단계 문서 업로드',
-        '2단계 질문 생성',
-        '3단계 질문 검토',
-        '4단계 질문 다운로드',
-      ];
+      const labels = evalMode === 'user'
+        ? ['1단계 문서 업로드', '2단계 문제 생성', '3단계 문제 검토', '4단계 문제 다운로드']
+        : ['1단계 문서 업로드', '2단계 질문 생성', '3단계 질문 검토', '4단계 질문 다운로드'];
       return labels[Math.min(currentStepValue, 4) - 1];
     }
-    return evaluationSummary ? '평가 결과 확인' : '결과 파일 업로드';
-  }, [activeMenu, currentStepValue, evaluationSummary]);
+    return evaluationSummary
+      ? '평가 결과 확인'
+      : (evalMode === 'user' ? '답안지 제출' : '결과 파일 업로드');
+  }, [activeMenu, currentStepValue, evaluationSummary, evalMode]);
 
   const headerPrimaryStatus = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
@@ -91,7 +92,8 @@ export default function RagEvaluationPage() {
 
   const headerSecondaryStatus = useMemo(() => {
     if (activeMenu === '테스트셋 생성') {
-      return generatedSummary ? `질문 ${generatedSummary.questionCount}개` : '질문 생성 전';
+      const unit = evalMode === 'user' ? '문제' : '질문';
+      return generatedSummary ? `${unit} ${generatedSummary.questionCount}개` : `${unit} 생성 전`;
     }
     return evaluationSummary
       ? `질문 ${evaluationSummary.evaluatedCount}개 평가`
@@ -249,8 +251,11 @@ export default function RagEvaluationPage() {
     });
 
     if (!pipelineRes.ok) {
-      const err = await pipelineRes.json();
-      throw new Error(err.detail ?? '질문 생성 실패');
+      const errText = await pipelineRes.text();
+      console.error('[Pipeline 500 원문]', errText);
+      let detail = '질문 생성 실패';
+      try { detail = JSON.parse(errText)?.detail ?? errText; } catch { detail = errText; }
+      throw new Error(`[${pipelineRes.status}] ${detail}`);
     }
 
     // ✅ .json()은 딱 한 번만 호출
@@ -308,9 +313,9 @@ export default function RagEvaluationPage() {
 
     const nowDate = new Date().toISOString().slice(0, 10);
     const csv = [
-      'qa_id,question,answer',
+      '번호,qa_id,질문',
       ...generatedQuestions.map(
-        (q) => `"${String(q.id)}","${q.text.replace(/"/g, '""')}",""`
+        (q, i) => `"${i + 1}","${q.id}","${q.text.replace(/"/g, '""')}"`
       ),
     ].join('\n');
 
@@ -330,13 +335,13 @@ export default function RagEvaluationPage() {
   // ─────────────────────────────────────────────────────────
   // 질문 수정 / 삭제
   // ─────────────────────────────────────────────────────────
-  const handleUpdateQuestion = (id: number, text: string) => {
+  const handleUpdateQuestion = (id: string, text: string) => {
     setGeneratedQuestions((prev) =>
       prev.map((q) => (q.id === id ? { ...q, text } : q)),
     );
   };
 
-  const handleRemoveQuestion = (id: number) => {
+  const handleRemoveQuestion = (id: string) => {
     setGeneratedQuestions((prev) => {
       const next = prev.filter((q) => q.id !== id);
       setGeneratedSummary((cur) =>
@@ -390,7 +395,7 @@ export default function RagEvaluationPage() {
           saved_filename:    savedFilename,
           original_filename: resultFile.name,
           document_id:       currentDocumentId,
-          mode:              pipelineMode,
+          mode:              evalMode === 'user' ? 'human' : 'model',
         }),
       });
 
@@ -408,6 +413,10 @@ export default function RagEvaluationPage() {
           faithfulness:      number;
           answerRelevancy:   number;
           answerCorrectness: number;
+          overallFeedback?: {
+            strengths: string;
+            direction: string;
+          };
         };
         rows: Array<{
           qa_id:     string;
@@ -419,6 +428,11 @@ export default function RagEvaluationPage() {
             answer_correctness: number;
           };
           avg_score: number;
+          feedback?: {
+            reasoning:    string;
+            improvements: string;
+            advice:       string;
+          };
         }>;
       } = await evalRes.json();
 
@@ -429,6 +443,9 @@ export default function RagEvaluationPage() {
         faithfulness:      evalData.summary.faithfulness,
         answerRelevancy:   evalData.summary.answerRelevancy,
         answerCorrectness: evalData.summary.answerCorrectness,
+        ...(evalData.summary.overallFeedback && {
+          overallFeedback: evalData.summary.overallFeedback,
+        }),
       };
 
       const rows: EvaluationRow[] = evalData.rows.map((row) => ({
@@ -441,8 +458,7 @@ export default function RagEvaluationPage() {
           answer_correctness: row.scores.answer_correctness,
         },
         avg_score: row.avg_score,
-        // EvaluationRowStatus가 필요하면 아래 주석 해제
-        // status: row.avg_score >= 0.7 ? 'pass' : 'fail' as EvaluationRowStatus,
+        ...(row.feedback && { feedback: row.feedback }),
       }));
 
       setEvaluationSummary(summary);
@@ -485,10 +501,44 @@ export default function RagEvaluationPage() {
   // ─────────────────────────────────────────────────────────
   // 렌더
   // ─────────────────────────────────────────────────────────
+
+  if (evalMode === null) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-slate-50 px-6">
+        <div className="text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">RAG Evaluation</p>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-900">평가 방식을 선택하세요</h1>
+          <p className="mt-3 text-base text-slate-500">학습자 직접 답변 평가 또는 AI 모델 자동 평가를 선택할 수 있습니다.</p>
+        </div>
+        <div className="grid w-full max-w-2xl gap-5 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setEvalMode('user')}
+            className="flex flex-col gap-3 rounded-2xl border-2 border-blue-200 bg-white p-8 text-left shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all hover:border-blue-400 hover:shadow-[0_12px_40px_rgba(37,99,235,0.15)]"
+          >
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-2xl">👤</span>
+            <p className="text-xl font-bold text-slate-900">사용자 평가하기</p>
+            <p className="text-sm leading-6 text-slate-500">학습자가 직접 작성한 답변을 업로드하여 이해도와 내용 완성도를 평가합니다. 채점 근거와 학습 피드백을 제공합니다.</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setEvalMode('model')}
+            className="flex flex-col gap-3 rounded-2xl border-2 border-slate-200 bg-white p-8 text-left shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all hover:border-slate-400 hover:shadow-[0_12px_40px_rgba(15,23,42,0.12)]"
+          >
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl">🤖</span>
+            <p className="text-xl font-bold text-slate-900">모델 평가하기</p>
+            <p className="text-sm leading-6 text-slate-500">AI 챗봇 모델의 답변 품질을 자동으로 평가합니다. 문서 일치도·질문 이해도·내용 완성도를 종합해 점수를 산출합니다.</p>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <Header
         activeMenu={activeMenu}
+        evalMode={evalMode}
         isGenerating={isGenerating}
         isEvaluating={isEvaluating}
         onActionClick={handleActionClick}
@@ -516,6 +566,7 @@ export default function RagEvaluationPage() {
             <div className="flex min-h-0 flex-1 flex-col">
               {activeMenu === '테스트셋 생성' ? (
                 <DatasetManager
+                  evalMode={evalMode}
                   isGenerating={isGenerating}
                   uploadedFile={uploadedFile}
                   generatedSummary={generatedSummary}
@@ -538,6 +589,7 @@ export default function RagEvaluationPage() {
                 />
               ) : (
                 <EvaluationResult
+                  evalMode={evalMode ?? 'model'}
                   isEvaluating={isEvaluating}
                   resultFile={resultFile}
                   generatedSummary={generatedSummary}

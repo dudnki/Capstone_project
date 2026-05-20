@@ -2,6 +2,11 @@
 # C:\Users\65car\capston_project1\Capstone_project\backend\app\main.py
 import sys
 import os
+
+# Windows cp949 터미널에서 유니코드 문자(em dash 등) print 시 오류 방지
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 print(f"현재 서버 파이썬 경로: {sys.executable}")
 print(f"현재 서버 환경 변수(PATH): {os.environ.get('PATH')}")
 
