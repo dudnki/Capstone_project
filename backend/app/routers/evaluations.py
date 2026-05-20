@@ -50,6 +50,25 @@ def submit_student_answers(
                 detail=f"업로드된 파일을 찾을 수 없습니다. (경로={file_path})"
             )
 
+        # 한글/영문 컬럼명 → 표준 컬럼명 변환
+        KOREAN_COL_MAP = {
+            "답안": "answer", "답변": "answer", "정답": "answer",
+            "질문": "question", "문제": "question",
+        }
+
+        def normalize_columns(frame: pd.DataFrame) -> pd.DataFrame:
+            col_rename = {}
+            for col in frame.columns:
+                stripped = col.strip()
+                if stripped in KOREAN_COL_MAP:
+                    col_rename[col] = KOREAN_COL_MAP[stripped]
+                    continue
+                for target in ["qa_id", "question", "answer"]:
+                    if stripped != target and stripped.lower().endswith(target):
+                        col_rename[col] = target
+                        break
+            return frame.rename(columns=col_rename) if col_rename else frame
+
         ext = os.path.splitext(req.original_filename)[-1].lower()
         if ext == ".csv":
             df = None
@@ -63,14 +82,7 @@ def submit_student_answers(
                         engine="python",
                         on_bad_lines="warn",
                     )
-                    col_rename = {}
-                    for col in tmp.columns:
-                        for target in ["qa_id", "question", "answer"]:
-                            if col != target and col.lower().endswith(target):
-                                col_rename[col] = target
-                                break
-                    if col_rename:
-                        tmp = tmp.rename(columns=col_rename)
+                    tmp = normalize_columns(tmp)
                     detected_cols[repr(sep)] = tmp.columns.tolist()
                     print(f"[DEBUG CSV] sep={repr(sep)}, columns={tmp.columns.tolist()}")
                     if {"qa_id", "answer"}.issubset(set(tmp.columns)):
@@ -85,7 +97,12 @@ def submit_student_answers(
                     detail=f"CSV 파일에서 qa_id, answer 컬럼을 찾을 수 없습니다. 감지된 컬럼: {detected_cols}",
                 )
         elif ext in [".xlsx", ".xls"]:
-            df = pd.read_excel(file_path)
+            df = normalize_columns(pd.read_excel(file_path))
+            if not {"qa_id", "answer"}.issubset(set(df.columns)):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"파일에서 qa_id, answer 컬럼을 찾을 수 없습니다. 감지된 컬럼: {df.columns.tolist()}",
+                )
         else:
             raise HTTPException(
                 status_code=400,

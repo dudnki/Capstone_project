@@ -1,5 +1,6 @@
 ﻿import React, { useMemo, useState } from 'react';
 import type {
+  EvalMode,
   GeneratedSummary,
   EvaluationSummary,
   EvaluationRow,
@@ -7,6 +8,7 @@ import type {
 } from '../src/types';
 
 interface EvaluationResultProps {
+  evalMode: EvalMode;
   isEvaluating: boolean;
   resultFile: File | null;
   generatedSummary: GeneratedSummary | null;
@@ -70,6 +72,7 @@ const getSummaryScores = (s: EvaluationSummary) => ({
 });
 
 export default function EvaluationResult({
+  evalMode,
   isEvaluating,
   resultFile,
   generatedSummary,
@@ -153,19 +156,19 @@ export default function EvaluationResult({
 
   // ✅ 수정: title 필드 올바르게 포함
   const metricPreviewCards = [
-  {
-    title: '질문 적합도', // title 필드 추가
-    description: '답변이 질문 의도에 맞게 작성되었는지 확인합니다.',
-  },
-  {
-    title: '정확도', // title 필드 추가
-    description: '답변 내용이 기준 문서와 비교해 정확한지 확인합니다.',
-  },
-  {
-    title: '문서 일치도', // title 필드 추가 (올바른 문자열)
-    description: '답변이 기준 문서 내용에 기반했는지 확인합니다.',
-  },
-];
+    {
+      title: '질문 이해도',
+      description: '답변이 질문 의도에 맞게 작성되었는지 확인합니다.',
+    },
+    {
+      title: '내용 완성도',
+      description: '답변 내용이 기준 문서와 비교해 정확한지 확인합니다.',
+    },
+    {
+      title: '문서 일치도',
+      description: '답변이 기준 문서 내용에 기반했는지 확인합니다.',
+    },
+  ];
 
 
   return (
@@ -206,13 +209,17 @@ export default function EvaluationResult({
           <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-5">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-xl font-semibold text-slate-900">결과 파일 업로드</h3>
+                <h3 className="text-xl font-semibold text-slate-900">
+                  {evalMode === 'user' ? '답안지 제출' : '결과 파일 업로드'}
+                </h3>
                 <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                   qa_id / answer
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-500">
-                질문 파일을 수행한 결과를 CSV 또는 엑셀 파일로 업로드하면 답변 품질을 평가할 수 있습니다.
+                {evalMode === 'user'
+                  ? '학습자가 작성한 답안지를 CSV 또는 엑셀 파일로 제출하면 채점 결과를 확인할 수 있습니다.'
+                  : '질문 파일을 수행한 결과를 CSV 또는 엑셀 파일로 업로드하면 답변 품질을 평가할 수 있습니다.'}
               </p>
             </div>
 
@@ -356,7 +363,7 @@ export default function EvaluationResult({
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">질문 적합도</p>
+            <p className="text-xs text-slate-500">질문 이해도</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.relevancy)}
             </p>
@@ -364,7 +371,7 @@ export default function EvaluationResult({
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">답변 정확도</p>
+            <p className="text-xs text-slate-500">내용 완성도</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.correctness)}
             </p>
@@ -381,6 +388,24 @@ export default function EvaluationResult({
         </section>
       )}
 
+      {/* 종합 피드백 (사용자 평가 모드) */}
+      {evalMode === 'user' && (evaluationSummary as any)?.overallFeedback && (
+        <section className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">잘한 점</p>
+            <p className="mt-3 text-sm leading-7 text-slate-700">
+              {(evaluationSummary as any).overallFeedback.strengths}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-600">학습 방향</p>
+            <p className="mt-3 text-sm leading-7 text-slate-700">
+              {(evaluationSummary as any).overallFeedback.direction}
+            </p>
+          </div>
+        </section>
+      )}
+
       {/* 질문별 상세 결과 */}
       {hasResults && (
         <section
@@ -393,7 +418,7 @@ export default function EvaluationResult({
                 평가 결과
               </p>
               <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
-                질문별 상세 결과
+                {evalMode === 'user' ? '문제별 상세 결과' : '질문별 상세 결과'}
               </h3>
               <p className="mt-1 text-sm text-slate-500">
                 질문, 사용자 답변, 세부 점수와 상태를 한 번에 확인합니다.
@@ -466,13 +491,13 @@ export default function EvaluationResult({
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">질문 적합도</p>
+                          <p className="text-[11px] text-slate-500">질문 이해도</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.relevancy)}
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">정확도</p>
+                          <p className="text-[11px] text-slate-500">내용 완성도</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.correctness)}
                           </p>
@@ -492,6 +517,29 @@ export default function EvaluationResult({
                         {(row as any).answer}
                       </p>
                     </div>
+
+                    {evalMode === 'user' && (row as any).feedback && (
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs font-semibold text-slate-500">채점 근거</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">
+                            {(row as any).feedback.reasoning}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                          <p className="text-xs font-semibold text-amber-600">개선 방향</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">
+                            {(row as any).feedback.improvements}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                          <p className="text-xs font-semibold text-blue-600">학습 조언</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">
+                            {(row as any).feedback.advice}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <span

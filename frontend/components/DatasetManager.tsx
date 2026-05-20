@@ -1,7 +1,8 @@
 ﻿import React, { useMemo, useState } from 'react';
-import type { QuestionItem, GeneratedSummary } from '../src/types';
+import type { QuestionItem, GeneratedSummary, EvalMode } from '../src/types';
 
 interface DatasetManagerProps {
+  evalMode?: EvalMode | null;
   isGenerating: boolean;
   uploadedFile: File | null;
   generatedSummary: GeneratedSummary | null;
@@ -19,14 +20,14 @@ interface DatasetManagerProps {
   onGenerateQuestions: () => void;
   onDownloadQuestions: () => void;
   onMoveToEvaluation: () => void;
-  onUpdateQuestion: (id: number, text: string) => void;
-  onRemoveQuestion: (id: number) => void;
+  onUpdateQuestion: (id: string, text: string) => void;
+  onRemoveQuestion: (id: string) => void;
 }
 
 const DOCUMENT_EXTENSIONS = ['PDF', 'csv', 'XLSX'];
-const STEPS = ['문서 업로드', '질문 생성', '질문 검토', '질문 다운로드'];
 
 export default function DatasetManager({
+  evalMode,
   uploadedFile,
   generatedSummary,
   generatedQuestions,
@@ -45,36 +46,65 @@ export default function DatasetManager({
   onUpdateQuestion,
   onRemoveQuestion,
 }: DatasetManagerProps) {
-  const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
+  const isUserMode = evalMode === 'user';
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
 
   const hasQuestions = generatedQuestions.length > 0;
+
+  const STEPS = isUserMode
+    ? ['문서 업로드', '문제 생성', '문제 검토', '문제 다운로드']
+    : ['문서 업로드', '질문 생성', '질문 검토', '질문 다운로드'];
 
   const statusCards = useMemo(
     () => [
       { label: '문서 업로드', value: uploadedFile ? '완료' : '대기' },
-      { label: '질문 세트', value: generatedSummary ? `${generatedSummary.questionCount}개 생성` : '미생성' },
-      { label: '질문 다운로드', value: hasDownloadedQuestionSet ? '완료' : '전' },
+      {
+        label: isUserMode ? '문제 세트' : '질문 세트',
+        value: generatedSummary ? `${generatedSummary.questionCount}개 생성` : '미생성',
+      },
+      {
+        label: isUserMode ? '문제 다운로드' : '질문 다운로드',
+        value: hasDownloadedQuestionSet ? '완료' : '전',
+      },
     ],
-    [uploadedFile, generatedSummary, hasDownloadedQuestionSet],
+    [uploadedFile, generatedSummary, hasDownloadedQuestionSet, isUserMode],
   );
 
-  const emptyGuideSteps = [
-    {
-      step: '01',
-      title: '기준 문서 업로드',
-      description: 'PDF, CSV, XLSX 문서를 업로드합니다.',
-    },
-    {
-      step: '02',
-      title: '질문 세트 생성',
-      description: '문서를 기반으로 평가용 질문 세트를 자동 생성합니다.',
-    },
-    {
-      step: '03',
-      title: '질문 검토 및 다운로드',
-      description: '생성된 질문을 수정하거나 삭제한 뒤 CSV 파일로 내려받습니다.',
-    },
-  ];
+  const emptyGuideSteps = isUserMode
+    ? [
+        {
+          step: '01',
+          title: '기준 문서 업로드',
+          description: 'PDF, CSV, XLSX 문서를 업로드합니다.',
+        },
+        {
+          step: '02',
+          title: '문제 세트 생성',
+          description: '문서를 기반으로 시험용 문제를 자동 생성합니다.',
+        },
+        {
+          step: '03',
+          title: '문제 검토 및 다운로드',
+          description: '생성된 문제를 수정·삭제한 뒤 학습자 배포용 CSV로 내려받습니다.',
+        },
+      ]
+    : [
+        {
+          step: '01',
+          title: '기준 문서 업로드',
+          description: 'PDF, CSV, XLSX 문서를 업로드합니다.',
+        },
+        {
+          step: '02',
+          title: '질문 세트 생성',
+          description: '문서를 기반으로 평가용 질문 세트를 자동 생성합니다.',
+        },
+        {
+          step: '03',
+          title: '질문 검토 및 다운로드',
+          description: '생성된 질문을 수정하거나 삭제한 뒤 CSV 파일로 내려받습니다.',
+        },
+      ];
 
   return (
     <div className="flex h-full flex-col gap-5">
@@ -213,10 +243,14 @@ export default function DatasetManager({
           <div className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">
-                {uploadedFile ? '질문 생성 준비가 완료되었습니다' : '문서를 올리면 상단에서 질문을 생성할 수 있습니다'}
+                {uploadedFile
+                  ? (isUserMode ? '문제 생성 준비가 완료되었습니다' : '질문 생성 준비가 완료되었습니다')
+                  : (isUserMode ? '문서를 올리면 상단에서 문제를 생성할 수 있습니다' : '문서를 올리면 상단에서 질문을 생성할 수 있습니다')}
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                생성된 질문은 아래에서 바로 수정하거나 삭제할 수 있습니다.
+                {isUserMode
+                  ? '생성된 문제는 아래에서 수정하거나 삭제할 수 있습니다.'
+                  : '생성된 질문은 아래에서 바로 수정하거나 삭제할 수 있습니다.'}
               </p>
             </div>
 
@@ -227,7 +261,7 @@ export default function DatasetManager({
                   onClick={onDownloadQuestions}
                   className="rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
                 >
-                  질문 다운로드
+                  {isUserMode ? '문제 다운로드' : '질문 다운로드'}
                 </button>
               )}
 
@@ -237,7 +271,7 @@ export default function DatasetManager({
                   onClick={onMoveToEvaluation}
                   className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
                 >
-                  성능 평가로 이동
+                  {isUserMode ? '답안지 제출하기' : '성능 평가로 이동'}
                 </button>
               )}
             </div>
