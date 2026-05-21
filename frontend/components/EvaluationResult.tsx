@@ -27,7 +27,7 @@ interface EvaluationResultProps {
   restoreScrollTop: (top: number) => void;
 }
 
-const RESULT_EXTENSIONS = ['CSV', 'XLSX'];
+const RESULT_EXTENSIONS = ['CSV'];
 
 const safeNum = (v: unknown): number => {
   const n = Number(v);
@@ -187,7 +187,7 @@ export default function EvaluationResult({
               </p>
               <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">성능 평가</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                사용자 결과 엑셀 파일을 업로드해 답변 품질을 한 화면에서 확인합니다.
+                사용자 결과 CSV 파일을 업로드해 답변 품질을 한 화면에서 확인합니다.
               </p>
             </div>
 
@@ -218,15 +218,15 @@ export default function EvaluationResult({
               </div>
               <p className="mt-1 text-sm text-slate-500">
                 {evalMode === 'user'
-                  ? '학습자가 작성한 답안지를 CSV 또는 엑셀 파일로 제출하면 채점 결과를 확인할 수 있습니다.'
-                  : '질문 파일을 수행한 결과를 CSV 또는 엑셀 파일로 업로드하면 답변 품질을 평가할 수 있습니다.'}
+                  ? '학습자가 작성한 답안지 CSV를 제출하면 채점 결과를 확인할 수 있습니다.'
+                  : '질문 파일을 수행한 결과를 CSV로 업로드하면 답변 품질을 평가할 수 있습니다.'}
               </p>
             </div>
 
             <input
               ref={resultFileInputRef}
               type="file"
-              accept=".csv, .xlsx"
+              accept=".csv"
               className="hidden"
               onChange={handleResultFileChange}
             />
@@ -276,7 +276,7 @@ export default function EvaluationResult({
                     평가할 결과 파일을 선택하세요
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    qa_id, answer 컬럼이 포함된 CSV 또는 엑셀 파일을 업로드하세요.
+                    qa_id, answer 컬럼이 포함된 CSV 파일을 업로드하세요.
                     <br />
                     현재는 답변 품질 평가 중심으로 결과를 제공합니다.
                   </p>

@@ -9,7 +9,7 @@ export type QuestionItem = {
 
 export type GeneratedSummary = {
   questionCount: number;
-  format: 'csv' | 'xlsx';
+  format: 'csv';
   createdAt: string;
 };
 

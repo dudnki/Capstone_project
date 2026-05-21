@@ -16,8 +16,8 @@ import type {
 } from '../src/types';
 
 const BASE_URL = 'http://localhost:8001';
-const DOCUMENT_EXTENSIONS = ['.pdf', '.xlsx'];
-const RESULT_EXTENSIONS = ['.csv', '.xlsx'];
+const DOCUMENT_EXTENSIONS = ['.pdf'];
+const RESULT_EXTENSIONS = ['.csv'];
 
 export default function RagEvaluationPage() {
   const [evalMode, setEvalMode] = useState<EvalMode | null>(null);
@@ -68,7 +68,7 @@ export default function RagEvaluationPage() {
     if (activeMenu === '테스트셋 생성') {
       return '기준 문서를 업로드하고 질문 세트를 생성한 뒤 필요한 질문만 검토합니다.';
     }
-    return '사용자 결과 엑셀 파일을 업로드해 답변 품질을 평가합니다.';
+    return '사용자 결과 CSV 파일을 업로드해 답변 품질을 평가합니다.';
   }, [activeMenu]);
 
   const headerStepLabel = useMemo(() => {
@@ -538,7 +538,6 @@ export default function RagEvaluationPage() {
     <div className="relative flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <Header
         activeMenu={activeMenu}
-        evalMode={evalMode}
         isGenerating={isGenerating}
         isEvaluating={isEvaluating}
         onActionClick={handleActionClick}

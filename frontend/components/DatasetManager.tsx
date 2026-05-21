@@ -24,7 +24,7 @@ interface DatasetManagerProps {
   onRemoveQuestion: (id: string) => void;
 }
 
-const DOCUMENT_EXTENSIONS = ['PDF', 'csv', 'XLSX'];
+const DOCUMENT_EXTENSIONS = ['PDF'];
 
 export default function DatasetManager({
   evalMode,
@@ -75,7 +75,7 @@ export default function DatasetManager({
         {
           step: '01',
           title: '기준 문서 업로드',
-          description: 'PDF, CSV, XLSX 문서를 업로드합니다.',
+          description: '기준 PDF 문서를 업로드합니다.',
         },
         {
           step: '02',
@@ -92,7 +92,7 @@ export default function DatasetManager({
         {
           step: '01',
           title: '기준 문서 업로드',
-          description: 'PDF, CSV, XLSX 문서를 업로드합니다.',
+          description: '기준 PDF 문서를 업로드합니다.',
         },
         {
           step: '02',
@@ -170,7 +170,7 @@ export default function DatasetManager({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf, .csv, .xlsx"
+              accept=".pdf"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -214,7 +214,7 @@ export default function DatasetManager({
                     업로드할 기준 문서를 선택하세요
                   </p>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    PDF, CSV, XLSX 문서를 업로드할 수 있습니다.
+                    PDF 문서만 업로드할 수 있습니다.
                     <br />
                     파일을 끌어다 놓거나 아래 버튼을 눌러 선택하세요.
                   </p>
@@ -301,10 +301,10 @@ export default function DatasetManager({
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">제출 형식</p>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">결과 제출 파일 예시</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              성능 평가 단계에서는 question, answer 컬럼이 포함된 엑셀 파일이 필요합니다.
+              성능 평가 단계에서는 question, answer 컬럼이 포함된 CSV 파일이 필요합니다.
             </p>
-            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`question | answer
-질문 내용 | 사용자 챗봇 답변`}</pre>
+            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`question,answer
+질문 내용,사용자 챗봇 답변`}</pre>
           </div>
         </section>
       )}
