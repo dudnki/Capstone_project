@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* ── 스크롤바 커스텀 ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
+
+/* ── 애니메이션 ── */
+@keyframes pulseGlow { 0%,100%{opacity:1} 50%{opacity:0.35} }
+@keyframes modalIn  { from{opacity:0;transform:scale(0.95) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+@keyframes toastIn  { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+@keyframes shimmer  { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
+@keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-9px); } }
+
+.pulse-dot  { animation: pulseGlow 1.6s ease infinite; }
+.modal-anim { animation: modalIn  0.24s cubic-bezier(.34,1.56,.64,1) both; }
+.toast-anim { animation: toastIn  0.3s ease both; }
+.float      { animation: float 3.4s ease-in-out infinite; }
+
+/* ── Hover 효과 모음 ── */
+.metric-card { transition: transform 0.18s, box-shadow 0.18s; }
+.metric-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,0.10) !important; }
+
+/* 드래그 앤 드롭 영역 */
+.dropzone { transition: all 0.2s; }
+.dropzone:hover {
+  border-color: #3b82f6 !important;
+  background: #eff6ff !important;
+}
+.dropzone:hover .drop-icon-wrap { background: #dbeafe !important; }
+.dropzone:hover .drop-icon-wrap svg { stroke: #2563eb !important; }
+
+/* 스텝 가이드 카드 */
+.step-card { transition: transform 0.18s, box-shadow 0.18s; }
+.step-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.09) !important; }
+
+/* 업로드 버튼 */
+.btn-upload { transition: all 0.15s; }
+.btn-upload:hover {
+  background: linear-gradient(135deg,#1d4ed8,#2563eb) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(37,99,235,0.35) !important;
+}
+
+/* 폰트 연결 */
+.font-mono {
+  font-family: var(--font-dm-mono), monospace !important;
+}
