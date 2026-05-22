@@ -433,6 +433,11 @@ export default function RagEvaluationPage() {
             improvements: string;
             advice:       string;
           };
+          score_reasons?: {
+            faithfulness:       string;
+            answer_relevancy:   string;
+            answer_correctness: string;
+          };
         }>;
       } = await evalRes.json();
 
@@ -459,6 +464,7 @@ export default function RagEvaluationPage() {
         },
         avg_score: row.avg_score,
         ...(row.feedback && { feedback: row.feedback }),
+        ...(row.score_reasons && { score_reasons: row.score_reasons }),
       }));
 
       setEvaluationSummary(summary);

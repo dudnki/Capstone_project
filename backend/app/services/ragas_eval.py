@@ -173,7 +173,7 @@ def generate_overall_feedback(results: list) -> dict:
 # ─────────────────────────────────────────────────────────
 # LLM judge 헬퍼 (RAGAS 0.00 fallback용)
 # ─────────────────────────────────────────────────────────
-def _evaluate_answer_relevancy(question: str, answer: str, llm) -> float:
+def _evaluate_answer_relevancy(question: str, answer: str, llm) -> tuple[float, str]:
     prompt = f"""당신은 Q&A 평가 전문가입니다.
 아래 질문과 답변을 읽고, 답변이 질문의 의도에 얼마나 적합하게 대답했는지 평가하세요.
 반드시 한국어로만 작성하세요. 영어, 한자, 러시아어 등 다른 언어를 절대 사용하지 마세요.
@@ -200,14 +200,15 @@ def _evaluate_answer_relevancy(question: str, answer: str, llm) -> float:
         data = json.loads(result.content)
         score = float(data.get("score", 0.5))
         score = max(0.0, min(1.0, score))
-        print(f"[DEBUG] answer_relevancy (LLM judge): {score:.4f} | {data.get('reason', '')}")
-        return round(score, 4)
+        reason = str(data.get("reason", ""))
+        print(f"[DEBUG] answer_relevancy (LLM judge): {score:.4f} | {reason}")
+        return round(score, 4), reason
     except Exception as e:
         print(f"[ERROR] answer_relevancy 평가 실패: {e}")
-        return 0.5
+        return 0.5, ""
 
 
-def _evaluate_faithfulness(context: str, answer: str, llm) -> float:
+def _evaluate_faithfulness(context: str, answer: str, llm) -> tuple[float, str]:
     prompt = f"""당신은 RAG 평가 전문가입니다.
 아래 참고 문서와 답변을 읽고, 답변의 내용이 참고 문서에 얼마나 근거하는지 평가하세요.
 반드시 한국어로만 작성하세요. 영어, 한자, 러시아어 등 다른 언어를 절대 사용하지 마세요.
@@ -239,16 +240,17 @@ def _evaluate_faithfulness(context: str, answer: str, llm) -> float:
         data = json.loads(text)
         score = float(data.get("score", 0.5))
         score = max(0.0, min(1.0, score))
-        print(f"[DEBUG] faithfulness (LLM judge): {score:.4f} | {data.get('reason', '')}")
-        return round(score, 4)
+        reason = str(data.get("reason", ""))
+        print(f"[DEBUG] faithfulness (LLM judge): {score:.4f} | {reason}")
+        return round(score, 4), reason
     except Exception as e:
         print(f"[ERROR] faithfulness 평가 실패: {e}")
-        return 0.5
+        return 0.5, ""
 
 
-def _evaluate_answer_correctness(question: str, answer: str, ground_truth: str, llm) -> float:
+def _evaluate_answer_correctness(question: str, answer: str, ground_truth: str, llm) -> tuple[float, str]:
     if not ground_truth:
-        return 0.5
+        return 0.5, ""
 
     prompt = f"""당신은 교육 평가 전문가입니다.
 아래 질문, 모범 답안, 제출된 답변을 비교하여 학생의 개념 이해도를 평가하세요.
@@ -282,17 +284,18 @@ def _evaluate_answer_correctness(question: str, answer: str, ground_truth: str, 
         data = json.loads(text)
         score = float(data.get("score", 0.5))
         score = max(0.0, min(1.0, score))
-        print(f"[DEBUG] answer_correctness concept (LLM judge): {score:.4f} | {data.get('reason', '')}")
-        return round(score, 4)
+        reason = str(data.get("reason", ""))
+        print(f"[DEBUG] answer_correctness concept (LLM judge): {score:.4f} | {reason}")
+        return round(score, 4), reason
     except Exception as e:
         print(f"[ERROR] answer_correctness 평가 실패: {e}")
-        return 0.5
+        return 0.5, ""
 
 
-def _evaluate_answer_correctness_keyword(question: str, answer: str, ground_truth: str, llm) -> float:
+def _evaluate_answer_correctness_keyword(question: str, answer: str, ground_truth: str, llm) -> tuple[float, str]:
     """키워드·핵심 사실 포함 여부 관점 채점 (RAGAS 대체용 앙상블 파트너)."""
     if not ground_truth:
-        return 0.5
+        return 0.5, ""
 
     prompt = f"""당신은 교육 평가 전문가입니다.
 아래 질문, 모범 답안, 제출된 답변을 비교하여 핵심 키워드와 사실 포함 여부를 평가하세요.
@@ -326,11 +329,12 @@ def _evaluate_answer_correctness_keyword(question: str, answer: str, ground_trut
         data = json.loads(text)
         score = float(data.get("score", 0.5))
         score = max(0.0, min(1.0, score))
-        print(f"[DEBUG] answer_correctness keyword (LLM judge): {score:.4f} | {data.get('reason', '')}")
-        return round(score, 4)
+        reason = str(data.get("reason", ""))
+        print(f"[DEBUG] answer_correctness keyword (LLM judge): {score:.4f} | {reason}")
+        return round(score, 4), reason
     except Exception as e:
         print(f"[ERROR] answer_correctness keyword 평가 실패: {e}")
-        return 0.5
+        return 0.5, ""
 
 
 # ─────────────────────────────────────────────────────────
@@ -417,25 +421,33 @@ def evaluate_model_document(
     except Exception as e:
         print(f"[ERROR] RAGAS 평가 실패, LLM judge fallback 전환: {e}")
 
+    score_reasons: dict[str, str] = {}
+
     if faithfulness == 0.0:
         print("[INFO] faithfulness 0.00 → LLM judge fallback")
-        faithfulness = _evaluate_faithfulness(context, answer, judge_llm)
+        faithfulness, score_reasons["faithfulness"] = _evaluate_faithfulness(context, answer, judge_llm)
+    else:
+        score_reasons["faithfulness"] = "RAGAS 기반 자동 평가"
 
     if answer_relevancy == 0.0:
         print("[INFO] answer_relevancy 0.00 → LLM judge fallback")
-        answer_relevancy = _evaluate_answer_relevancy(question, answer, judge_llm)
+        answer_relevancy, score_reasons["answer_relevancy"] = _evaluate_answer_relevancy(question, answer, judge_llm)
+    else:
+        score_reasons["answer_relevancy"] = "RAGAS 기반 자동 평가"
 
     if answer_correctness == 0.0:
         # RAGAS 실패 시 → keyword LLM judge × 0.5 + concept LLM judge × 0.5 앙상블 fallback
         print("[INFO] answer_correctness 0.00 → keyword+concept 앙상블 fallback")
-        keyword_score = _evaluate_answer_correctness_keyword(question, answer, ground_truth, judge_llm)
-        concept_score = _evaluate_answer_correctness(question, answer, ground_truth, judge_llm)
+        keyword_score, kw_reason = _evaluate_answer_correctness_keyword(question, answer, ground_truth, judge_llm)
+        concept_score, co_reason = _evaluate_answer_correctness(question, answer, ground_truth, judge_llm)
         answer_correctness = round(keyword_score * 0.5 + concept_score * 0.5, 4)
+        score_reasons["answer_correctness"] = f"키워드: {kw_reason} | 개념: {co_reason}"
         print(f"[DEBUG] answer_correctness fallback 앙상블 → {answer_correctness:.4f}")
     else:
         # 앙상블: RAGAS(키워드 F1) × 0.5 + LLM judge(개념 이해도) × 0.5
-        llm_corr = _evaluate_answer_correctness(question, answer, ground_truth, judge_llm)
+        llm_corr, co_reason = _evaluate_answer_correctness(question, answer, ground_truth, judge_llm)
         answer_correctness = round(answer_correctness * 0.5 + llm_corr * 0.5, 4)
+        score_reasons["answer_correctness"] = co_reason
         print(f"[DEBUG] answer_correctness 앙상블 → {answer_correctness:.4f}")
 
     avg_score = round((faithfulness + answer_relevancy + answer_correctness) / 3, 4)
@@ -453,6 +465,7 @@ def evaluate_model_document(
         "answer_relevancy":   answer_relevancy,
         "answer_correctness": answer_correctness,
         "avg_score":          avg_score,
+        "score_reasons":      score_reasons,
     }
 
 
@@ -509,18 +522,18 @@ def evaluate_user_document(
     if answer_correctness == 0.0:
         # RAGAS 실패 시 → keyword LLM judge × 0.5 + concept LLM judge × 0.5 앙상블 fallback
         print("[INFO] answer_correctness 0.00 → keyword+concept 앙상블 fallback")
-        keyword_score = _evaluate_answer_correctness_keyword(question, user_answer, ground_truth, judge_llm)
-        concept_score = _evaluate_answer_correctness(question, user_answer, ground_truth, judge_llm)
+        keyword_score, _ = _evaluate_answer_correctness_keyword(question, user_answer, ground_truth, judge_llm)
+        concept_score, _ = _evaluate_answer_correctness(question, user_answer, ground_truth, judge_llm)
         answer_correctness = round(keyword_score * 0.5 + concept_score * 0.5, 4)
         print(f"[DEBUG] answer_correctness fallback 앙상블 → {answer_correctness:.4f}")
     else:
         # 앙상블: RAGAS(키워드 F1) × 0.5 + LLM judge(개념 이해도) × 0.5
-        llm_corr = _evaluate_answer_correctness(question, user_answer, ground_truth, judge_llm)
+        llm_corr, _ = _evaluate_answer_correctness(question, user_answer, ground_truth, judge_llm)
         answer_correctness = round(answer_correctness * 0.5 + llm_corr * 0.5, 4)
         print(f"[DEBUG] answer_correctness 앙상블 → {answer_correctness:.4f}")
 
-    faithfulness     = _evaluate_faithfulness(context, user_answer, judge_llm)
-    answer_relevancy = _evaluate_answer_relevancy(question, user_answer, judge_llm)
+    faithfulness, _     = _evaluate_faithfulness(context, user_answer, judge_llm)
+    answer_relevancy, _ = _evaluate_answer_relevancy(question, user_answer, judge_llm)
 
     avg_score = round(
         (faithfulness + answer_relevancy + answer_correctness) / 3, 4

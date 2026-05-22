@@ -1,7 +1,9 @@
 ﻿import React from 'react';
+import type { EvalMode } from '../src/types';
 
 interface HeaderProps {
   activeMenu: string;
+  evalMode?: EvalMode | null;
   isGenerating: boolean;
   isEvaluating: boolean;
   onActionClick: () => void;
@@ -14,6 +16,7 @@ interface HeaderProps {
 
 export default function Header({
   activeMenu,
+  evalMode,
   isGenerating,
   isEvaluating,
   onActionClick,
@@ -24,10 +27,15 @@ export default function Header({
   secondaryStatus,
 }: HeaderProps) {
   const isTestsetMenu = activeMenu === '테스트셋 생성';
+  const isUserMode = evalMode === 'user';
   const isLoading = isTestsetMenu ? isGenerating : isEvaluating;
   const isDisabled = isLoading || isActionDisabled;
-  const buttonLabel = isTestsetMenu ? '질문 생성하기' : '평가 실행하기';
-  const loadingLabel = isTestsetMenu ? '질문 생성 중...' : '평가 실행 중...';
+  const buttonLabel = isTestsetMenu
+    ? (isUserMode ? '문제 생성하기' : '질문 생성하기')
+    : (isUserMode ? '채점하기' : '평가 실행하기');
+  const loadingLabel = isTestsetMenu
+    ? (isUserMode ? '문제 생성 중...' : '질문 생성 중...')
+    : (isUserMode ? '채점 중...' : '평가 실행 중...');
 
   return (
     <header className="relative z-[60] flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4 shadow-[0_1px_4px_rgba(15,23,42,0.04)] lg:px-6">
