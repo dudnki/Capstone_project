@@ -1,7 +1,6 @@
 ﻿import React, { useMemo, useState } from 'react';
 import type {
   EvalMode,
-  GeneratedSummary,
   EvaluationSummary,
   EvaluationRow,
   EvaluationRowStatus,
@@ -11,9 +10,10 @@ interface EvaluationResultProps {
   evalMode: EvalMode;
   isEvaluating: boolean;
   resultFile: File | null;
-  generatedSummary: GeneratedSummary | null;
   evaluationSummary: EvaluationSummary | null;
   evaluationRows: EvaluationRow[];
+  evaluationProgress: number;
+  evaluationElapsedSeconds: number;
   resultFileInputRef: React.RefObject<HTMLInputElement | null>;
   isDraggingResult: boolean;
   handleResultDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
@@ -21,7 +21,6 @@ interface EvaluationResultProps {
   handleResultDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   handleResultFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveResultFile: () => void;
-  onRunEvaluation: () => void;
   formatFileSize: (bytes: number) => string;
   getScrollTop: () => number;
   restoreScrollTop: (top: number) => void;
@@ -71,13 +70,47 @@ const getSummaryScores = (s: EvaluationSummary) => ({
   correctness:  safeNum((s as any).answerCorrectness ?? (s as any).accuracyScore),
 });
 
+const normalizeFeedbackText = (value: unknown) => {
+  const text = typeof value === 'string' ? value.trim() : '';
+
+  return text
+    .replaceAll('학생의 답변은', '제출 답변은')
+    .replaceAll('학생 답변은', '제출 답변은')
+    .replaceAll('학생은', '제출 답변은')
+    .replaceAll('학생이', '제출 답변이')
+    .replaceAll('학생의 답변', '제출 답변')
+    .replaceAll('학생 답변', '제출 답변')
+    .replaceAll('학생의', '제출 답변의')
+    .replaceAll('학생에게', '학습자에게')
+    .replaceAll('학생', '학습자');
+};
+
+const parseAdviceSteps = (value: unknown) => {
+  const text = normalizeFeedbackText(value);
+  if (!text) return [];
+
+  const matches = [...text.matchAll(/(\d+단계)\s*[:：]?\s*([\s\S]*?)(?=\s*\d+단계\s*[:：]?|$)/g)];
+
+  if (matches.length === 0) {
+    return [{ label: '조언', body: text }];
+  }
+
+  return matches
+    .map((match) => ({
+      label: match[1],
+      body: match[2].trim(),
+    }))
+    .filter((item) => item.body.length > 0);
+};
+
 export default function EvaluationResult({
   evalMode,
   isEvaluating,
   resultFile,
-  generatedSummary,
   evaluationSummary,
   evaluationRows,
+  evaluationProgress,
+  evaluationElapsedSeconds,
   resultFileInputRef,
   isDraggingResult,
   handleResultDragOver,
@@ -85,7 +118,6 @@ export default function EvaluationResult({
   handleResultDrop,
   handleResultFileChange,
   onRemoveResultFile,
-  onRunEvaluation,
   formatFileSize,
   getScrollTop,
   restoreScrollTop,
@@ -93,6 +125,31 @@ export default function EvaluationResult({
   const [statusFilter, setStatusFilter] = useState<'all' | EvaluationRowStatus>('all');
 
   const hasResults = evaluationRows.length > 0;
+  const currentStep = !resultFile ? 1 : !evaluationSummary ? 2 : 3;
+  const steps = ['결과 CSV 업로드', '평가 실행', '결과 확인'];
+  const stepProgress = evaluationSummary ? steps.length + 1 : currentStep;
+  const visibleStep = Math.min(stepProgress, steps.length);
+
+  const csvUploadIcon = (
+    <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_rgba(37,99,235,0.08)]">
+      <svg
+        width="26"
+        height="26"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" />
+        <path d="M14 2v5h5" />
+        <path d="M8 13h8" />
+        <path d="M8 17h5" />
+      </svg>
+    </div>
+  );
 
   const rowsWithStatus = useMemo(
     () =>
@@ -109,6 +166,10 @@ export default function EvaluationResult({
     if (statusFilter === 'all') return rowsWithStatus;
     return rowsWithStatus.filter((row) => row._status === statusFilter);
   }, [rowsWithStatus, statusFilter]);
+  const stableResultListMinHeight = Math.max(
+    720,
+    rowsWithStatus.length * (evalMode === 'user' ? 460 : 260),
+  );
 
   const formatScore = (score: unknown): string => safeNum(score).toFixed(2);
 
@@ -138,89 +199,131 @@ export default function EvaluationResult({
   };
 
   const summaryScores = evaluationSummary ? getSummaryScores(evaluationSummary) : null;
+  const overallFeedback = (evaluationSummary as any)?.overallFeedback;
+  const overallDirectionSteps = parseAdviceSteps(overallFeedback?.direction);
 
-  const summaryCards = [
-    {
-      label: '질문 세트',
-      value: generatedSummary ? `${generatedSummary.questionCount}개 준비` : '필요',
-    },
-    {
-      label: '결과 파일',
-      value: resultFile ? '업로드됨' : '없음',
-    },
-    {
-      label: '평가 상태',
-      value: evaluationSummary ? '완료' : isEvaluating ? '진행 중' : '대기',
-    },
-  ];
-
-  // ✅ 수정: title 필드 올바르게 포함
   const metricPreviewCards = [
     {
-      title: '질문 이해도',
+      title: '종합',
+      description: '관련성, 정확도, 유사도를 종합해 전체 답변 품질을 확인합니다.',
+    },
+    {
+      title: '관련성',
       description: '답변이 질문 의도에 맞게 작성되었는지 확인합니다.',
     },
     {
-      title: '내용 완성도',
+      title: '정확도',
       description: '답변 내용이 기준 문서와 비교해 정확한지 확인합니다.',
     },
     {
-      title: '문서 일치도',
-      description: '답변이 기준 문서 내용에 기반했는지 확인합니다.',
+      title: '유사도',
+      description: '답변이 기준 문서 기반 기대 답변과 얼마나 유사한지 확인합니다.',
     },
   ];
 
 
   return (
-    <div className="flex h-full flex-col gap-5">
+    <div className="flex h-full flex-col gap-4">
       {/* 상단 업로드 섹션 */}
       <section
         className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)] ${
-          hasResults ? '' : 'flex-1'
+          hasResults ? '' : 'flex-1 lg:h-[680px] 2xl:h-[700px]'
         }`}
       >
-        <div className="flex-shrink-0 border-b border-slate-100 px-6 py-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="max-w-3xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
-                Evaluation
-              </p>
-              <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">성능 평가</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                사용자 결과 CSV 파일을 업로드해 답변 품질을 한 화면에서 확인합니다.
-              </p>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[372px]">
-              {summaryCards.map((item) => (
-                <div
-                  key={item.label}
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3"
-                >
-                  <p className="text-[11px] font-medium text-slate-500">{item.label}</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">{item.value}</p>
-                </div>
-              ))}
-            </div>
+        <div className="flex-shrink-0 border-b border-blue-100 bg-blue-50/40 px-6 py-4">
+          <div className="max-w-3xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
+              Evaluation
+            </p>
+            <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">성능 평가</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              결과 CSV를 업로드해 답변 품질을 한 화면에서 확인합니다.
+            </p>
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col p-6">
-          <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-h-0 flex-1 flex-col p-5">
+          <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-xl font-semibold text-slate-900">
-                  {evalMode === 'user' ? '답안지 제출' : '결과 파일 업로드'}
+                  {evalMode === 'user' ? '답안지 CSV 제출' : '결과 CSV 업로드'}
                 </h3>
                 <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                  qa_id / answer
+                  qa_id / 답변
+                </span>
+                </div>
+                <p className="mt-2 text-sm text-slate-500">
+                  {evalMode === 'user'
+                    ? '다운로드한 답변 작성용 CSV에 답변을 채워 제출하면 채점 결과를 확인할 수 있습니다.'
+                    : '다운로드한 질문 CSV를 RAG/챗봇에 실행한 뒤 답변 컬럼을 채워 업로드합니다.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-blue-100 bg-white px-4 py-3 shadow-[0_8px_20px_rgba(37,99,235,0.04)]">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">진행 단계</p>
+                <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
+                  {visibleStep} / {steps.length}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-slate-500">
-                {evalMode === 'user'
-                  ? '학습자가 작성한 답안지 CSV를 제출하면 채점 결과를 확인할 수 있습니다.'
-                  : '질문 파일을 수행한 결과를 CSV로 업로드하면 답변 품질을 평가할 수 있습니다.'}
-              </p>
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {steps.map((step, index) => (
+                  <div
+                    key={step}
+                    className={`rounded-xl border px-3 py-2.5 ${
+                      index + 1 < stepProgress
+                        ? 'border-emerald-100 bg-emerald-50/70'
+                        : index + 1 === stepProgress
+                          ? 'border-blue-300 bg-blue-50/70 shadow-[0_8px_20px_rgba(37,99,235,0.10)]'
+                          : 'border-slate-200 bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                          index + 1 < stepProgress
+                            ? 'bg-emerald-500 text-white'
+                            : index + 1 === stepProgress
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-200 text-slate-500'
+                        }`}
+                      >
+                        {index + 1 < stepProgress ? '✓' : index + 1}
+                      </span>
+                      <span
+                        className={`text-xs font-semibold ${
+                          index + 1 <= stepProgress ? 'text-slate-900' : 'text-slate-500'
+                        }`}
+                      >
+                        {step}
+                      </span>
+                    </div>
+                    <p
+                      className={`mt-1.5 text-[11px] ${
+                        index + 1 === stepProgress
+                          ? 'font-semibold text-blue-700'
+                          : index + 1 < stepProgress
+                            ? 'text-emerald-700'
+                            : 'text-slate-400'
+                      }`}
+                    >
+                      {index + 1 < stepProgress ? (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          완료
+                        </span>
+                      ) : index + 1 === stepProgress ? (
+                        '현재 단계'
+                      ) : (
+                        '대기'
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <input
@@ -231,78 +334,121 @@ export default function EvaluationResult({
               onChange={handleResultFileChange}
             />
 
-            <div
-              className={`mt-4 flex min-h-[190px] flex-1 flex-col items-center justify-center rounded-2xl border border-dashed px-8 transition-colors ${
-                isDraggingResult
-                  ? 'border-blue-300 bg-blue-50/70'
-                  : 'border-slate-300 bg-white'
-              }`}
-              onDragOver={handleResultDragOver}
-              onDragLeave={handleResultDragLeave}
-              onDrop={handleResultDrop}
-            >
-              {resultFile ? (
-                <div className="flex w-full flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-500">업로드된 결과 파일</p>
-                    <p className="mt-1 truncate text-xl font-semibold text-slate-900">
-                      {resultFile.name}
-                    </p>
-                    <p className="mt-2 text-sm text-slate-500">
-                      {formatFileSize(resultFile.size)}
-                    </p>
-                  </div>
+            <div className="mt-4 grid flex-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div
+                className={`flex min-h-[310px] flex-col items-center justify-center rounded-2xl border border-dashed px-8 transition-colors ${
+                  isDraggingResult
+                      ? 'border-blue-300 bg-blue-50/70'
+                      : 'border-slate-300 bg-white'
+                }`}
+                onDragOver={handleResultDragOver}
+                onDragLeave={handleResultDragLeave}
+                onDrop={handleResultDrop}
+              >
+                {resultFile ? (
+                  <div className="flex w-full flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-slate-500">업로드된 결과 CSV</p>
+                      <p className="mt-1 truncate text-2xl font-semibold text-slate-900">
+                        {resultFile.name}
+                      </p>
+                      <p className="mt-2 text-sm text-slate-500">
+                        {formatFileSize(resultFile.size)}
+                      </p>
+                    </div>
 
-                  <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[272px]">
+                    <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[272px]">
+                      <button
+                        type="button"
+                        onClick={() => resultFileInputRef.current?.click()}
+                        className="rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
+                      >
+                        CSV 변경
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onRemoveResultFile}
+                        className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
+                      >
+                        제거
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
+                    {csvUploadIcon}
+                      <p className="text-2xl font-semibold tracking-tight text-slate-900">
+                      평가할 결과 CSV를 업로드하세요
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-slate-500">
+                      번호, qa_id, 질문, 답변 형식의 CSV 파일을 업로드합니다.
+                      <br />
+                      qa_id는 그대로 유지하고 답변 컬럼만 채워 주세요.
+                    </p>
                     <button
                       type="button"
                       onClick={() => resultFileInputRef.current?.click()}
-                      className="rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
+                      className="mt-6 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.18)] hover:bg-blue-700"
                     >
-                      파일 변경
+                      CSV 선택
                     </button>
-                    <button
-                      type="button"
-                      onClick={onRemoveResultFile}
-                      className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
-                    >
-                      제거
-                    </button>
+                    <div className="mt-5 flex flex-wrap justify-center gap-2">
+                      {RESULT_EXTENSIONS.map((ext) => (
+                        <span
+                          key={ext}
+                          className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500"
+                        >
+                          {ext}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-                  <p className="text-2xl font-semibold tracking-tight text-slate-900">
-                    평가할 결과 파일을 선택하세요
+                )}
+              </div>
+
+              <aside className="grid min-h-[310px] min-w-0 grid-rows-2 gap-3">
+                <div className="flex min-h-0 min-w-0 flex-col justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">
+                    제출 CSV 형식
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    qa_id, answer 컬럼이 포함된 CSV 파일을 업로드하세요.
-                    <br />
-                    현재는 답변 품질 평가 중심으로 결과를 제공합니다.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => resultFileInputRef.current?.click()}
-                    className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.18)] hover:bg-blue-700"
-                  >
-                    결과 파일 선택
-                  </button>
-                  <div className="mt-5 flex flex-wrap justify-center gap-2">
-                    {RESULT_EXTENSIONS.map((ext) => (
-                      <span
-                        key={ext}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500"
-                      >
-                        {ext}
-                      </span>
-                    ))}
+                  <p className="mt-3 text-sm font-semibold text-slate-900">필수 컬럼</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                      qa_id
+                    </span>
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                      답변
+                    </span>
                   </div>
+                  <p className="mt-3 text-xs leading-5 text-slate-500">
+                    qa_id는 그대로 유지하고, 답변만 입력합니다.
+                  </p>
                 </div>
-              )}
+
+                <div className="flex min-h-0 min-w-0 flex-col justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">
+                    업로드 전 확인
+                  </p>
+                  <ul className="mt-3 space-y-2 text-xs leading-5 text-slate-600">
+                    <li className="flex gap-2">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <span>CSV 파일만 업로드할 수 있습니다.</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <span>qa_id는 다운로드한 값 그대로 유지합니다.</span>
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <span>답변 컬럼에는 평가할 답변만 입력합니다.</span>
+                    </li>
+                  </ul>
+                </div>
+              </aside>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+          <div className="mt-3 grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">
                 {resultFile
@@ -310,8 +456,28 @@ export default function EvaluationResult({
                   : '결과 파일을 업로드하면 상단에서 평가를 실행할 수 있습니다'}
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                qa_id, answer 기준으로 질문 적합도와 답변 정확도를 함께 확인합니다.
+                qa_id와 답변을 기준으로 관련성, 정확도, 유사도를 함께 확인합니다.
               </p>
+              {isEvaluating && (
+                <div className="mt-4 max-w-xl rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+                  <div className="flex items-center justify-between gap-3 text-xs font-semibold text-blue-700">
+                    <span>평가 진행 중</span>
+                    <span>{evaluationProgress}% · {evaluationElapsedSeconds}초</span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">
+                    <div
+                      className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                      style={{ width: `${evaluationProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              {!isEvaluating && evaluationSummary && (
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  평가 완료 · {evaluationElapsedSeconds}초 소요
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -319,17 +485,17 @@ export default function EvaluationResult({
 
       {/* 평가 기준 미리보기 (결과 없을 때) */}
       {!hasResults && (
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+          <div className="min-h-[208px] rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
               평가 기준
             </p>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">평가 기준 미리보기</h3>
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
               {metricPreviewCards.map((item) => (
                 <div
                   key={item.title}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  className="min-h-[108px] rounded-2xl border border-slate-200 bg-slate-50 p-4"
                 >
                   <p className="text-sm font-semibold text-slate-900">{item.title}</p>
                   <p className="mt-2 text-sm leading-6 text-slate-500">{item.description}</p>
@@ -338,15 +504,16 @@ export default function EvaluationResult({
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+          <div className="min-h-[208px] rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
               제출 형식
             </p>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">결과 제출 파일 예시</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              아래와 같은 컬럼 구조의 파일을 제출하면 평가에 사용할 수 있습니다.
+              qa_id와 답변이 포함된 CSV를 제출하면 평가에 사용할 수 있습니다.
             </p>
-            <pre className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`qa_id  | answer\nabc123 | 기준 문서를 바탕으로 질문 세트를 만들고 답변 품질을 평가합니다.\ndef456 | question과 answer 컬럼이 필요합니다.`}</pre>
+            <pre className="mt-4 min-h-[72px] overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`번호,qa_id,질문,답변
+1,qa_001,문서의 핵심 목적은 무엇인가요?,사용자 RAG 시스템 답변`}</pre>
           </div>
         </section>
       )}
@@ -355,7 +522,7 @@ export default function EvaluationResult({
       {evaluationSummary && summaryScores && (
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">종합 점수</p>
+            <p className="text-xs text-slate-500">종합</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.overall)}
             </p>
@@ -363,15 +530,15 @@ export default function EvaluationResult({
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">질문 이해도</p>
+            <p className="text-xs text-slate-500">관련성</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.relevancy)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변이 질문 의도에 맞는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">답변이 질문 의도와 얼마나 관련 있는지 평가</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">내용 완성도</p>
+            <p className="text-xs text-slate-500">정확도</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.correctness)}
             </p>
@@ -379,29 +546,39 @@ export default function EvaluationResult({
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">문서 일치도</p>
+            <p className="text-xs text-slate-500">유사도</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.faithfulness)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변이 기준 문서 내용에 기반했는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">답변이 기준 문서 기반 기대 답변과 유사한지 평가</p>
           </div>
         </section>
       )}
 
       {/* 종합 피드백 (사용자 평가 모드) */}
-      {evalMode === 'user' && (evaluationSummary as any)?.overallFeedback && (
+      {evalMode === 'user' && overallFeedback && (
         <section className="grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-blue-100 bg-blue-50 p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">잘한 점</p>
             <p className="mt-3 text-sm leading-7 text-slate-700">
-              {(evaluationSummary as any).overallFeedback.strengths}
+              {normalizeFeedbackText(overallFeedback.strengths)}
             </p>
           </div>
           <div className="rounded-2xl border border-amber-100 bg-amber-50 p-6 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-600">학습 방향</p>
-            <p className="mt-3 text-sm leading-7 text-slate-700">
-              {(evaluationSummary as any).overallFeedback.direction}
-            </p>
+            <div className="mt-3 grid gap-2">
+              {overallDirectionSteps.map((item) => (
+                <div
+                  key={`overall-${item.label}`}
+                  className="rounded-xl border border-amber-100 bg-white/70 p-3"
+                >
+                  <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                    {item.label}
+                  </span>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">{item.body}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       )}
@@ -409,8 +586,8 @@ export default function EvaluationResult({
       {/* 질문별 상세 결과 */}
       {hasResults && (
         <section
-          className="min-h-[980px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]"
-          style={{ overflowAnchor: 'none' }}
+          className="min-h-[760px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]"
+          style={{ minHeight: stableResultListMinHeight + 80, overflowAnchor: 'none' }}
         >
           <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -454,12 +631,13 @@ export default function EvaluationResult({
             </div>
           </div>
 
-          <div className="min-h-[760px] divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100" style={{ minHeight: stableResultListMinHeight }}>
             {filteredRows.map((row, idx) => {
               const rowKey   = (row as any).qa_id ?? (row as any).id ?? idx;
               const rowLabel = (row as any).qa_id ?? (row as any).id ?? idx + 1;
               const scores   = row._scores;
               const status   = row._status;
+              const adviceSteps = parseAdviceSteps((row as any).feedback?.advice);
 
               return (
                 <div key={String(rowKey)} className="px-6 py-5">
@@ -491,19 +669,19 @@ export default function EvaluationResult({
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">질문 이해도</p>
+                          <p className="text-[11px] text-slate-500">관련성</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.relevancy)}
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">내용 완성도</p>
+                          <p className="text-[11px] text-slate-500">정확도</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.correctness)}
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">문서 일치도</p>
+                          <p className="text-[11px] text-slate-500">유사도</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.faithfulness)}
                           </p>
@@ -512,7 +690,7 @@ export default function EvaluationResult({
                     </div>
 
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-xs font-semibold text-slate-500">사용자 답변</p>
+                      <p className="text-xs font-semibold text-slate-500">제출 답변</p>
                       <p className="mt-2 text-sm leading-7 text-slate-700">
                         {(row as any).answer}
                       </p>
@@ -523,20 +701,30 @@ export default function EvaluationResult({
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <p className="text-xs font-semibold text-slate-500">채점 근거</p>
                           <p className="mt-2 text-sm leading-6 text-slate-700">
-                            {(row as any).feedback.reasoning}
+                            {normalizeFeedbackText((row as any).feedback.reasoning)}
                           </p>
                         </div>
                         <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
                           <p className="text-xs font-semibold text-amber-600">개선 방향</p>
                           <p className="mt-2 text-sm leading-6 text-slate-700">
-                            {(row as any).feedback.improvements}
+                            {normalizeFeedbackText((row as any).feedback.improvements)}
                           </p>
                         </div>
                         <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-                          <p className="text-xs font-semibold text-blue-600">학습 조언</p>
-                          <p className="mt-2 text-sm leading-6 text-slate-700">
-                            {(row as any).feedback.advice}
-                          </p>
+                          <p className="text-xs font-semibold text-blue-600">학습 방향</p>
+                          <div className="mt-3 space-y-2">
+                            {adviceSteps.map((item) => (
+                              <div
+                                key={`${String(rowKey)}-${item.label}`}
+                                className="rounded-xl border border-blue-100 bg-white/75 p-3"
+                              >
+                                <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700">
+                                  {item.label}
+                                </span>
+                                <p className="mt-2 text-sm leading-6 text-slate-700">{item.body}</p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}
