@@ -7,7 +7,11 @@ interface HeaderProps {
   isGenerating: boolean;
   isEvaluating: boolean;
   onActionClick: () => void;
+  onHomeClick: () => void;
   isActionDisabled?: boolean;
+  isActionComplete?: boolean;
+  actionProgress?: number;
+  modeLabel?: string;
   description?: string;
   currentStepLabel?: string;
   primaryStatus?: string;
@@ -20,7 +24,11 @@ export default function Header({
   isGenerating,
   isEvaluating,
   onActionClick,
+  onHomeClick,
   isActionDisabled = false,
+  isActionComplete = false,
+  actionProgress,
+  modeLabel,
   description,
   currentStepLabel,
   primaryStatus,
@@ -29,18 +37,26 @@ export default function Header({
   const isTestsetMenu = activeMenu === '테스트셋 생성';
   const isUserMode = evalMode === 'user';
   const isLoading = isTestsetMenu ? isGenerating : isEvaluating;
-  const isDisabled = isLoading || isActionDisabled;
-  const buttonLabel = isTestsetMenu
-    ? (isUserMode ? '문제 생성하기' : '질문 생성하기')
-    : (isUserMode ? '채점하기' : '평가 실행하기');
-  const loadingLabel = isTestsetMenu
-    ? (isUserMode ? '문제 생성 중...' : '질문 생성 중...')
-    : (isUserMode ? '채점 중...' : '평가 실행 중...');
+  const isDisabled = isLoading || isActionDisabled || isActionComplete;
+  const buttonLabel = isTestsetMenu ? '질문 생성하기' : '평가 실행하기';
+  const loadingLabel = isTestsetMenu ? '질문 생성 중...' : '평가 실행 중...';
+  const completeLabel = isTestsetMenu ? '질문 생성 완료' : '평가 완료';
+  const displayedButtonLabel = isLoading
+    ? `${loadingLabel}${typeof actionProgress === 'number' ? ` ${actionProgress}%` : ''}`
+    : isActionComplete
+      ? completeLabel
+      : buttonLabel;
 
   return (
     <header className="relative z-[60] flex flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4 shadow-[0_1px_4px_rgba(15,23,42,0.04)] lg:px-6">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.16)]">
+        <button
+          type="button"
+          onClick={onHomeClick}
+          aria-label="처음 화면으로 이동"
+          title="처음 화면으로 이동"
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.16)] transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        >
           <svg
             width="16"
             height="16"
@@ -53,7 +69,7 @@ export default function Header({
           >
             <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
           </svg>
-        </div>
+        </button>
 
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -61,6 +77,11 @@ export default function Header({
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
               {activeMenu}
             </span>
+            {modeLabel && (
+              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                {modeLabel}
+              </span>
+            )}
           </div>
 
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -97,7 +118,7 @@ export default function Header({
         }`}
       >
         {!isDisabled && <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-200" />}
-        {isLoading ? loadingLabel : buttonLabel}
+        {displayedButtonLabel}
       </button>
     </header>
   );

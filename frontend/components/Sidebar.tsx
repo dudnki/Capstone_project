@@ -23,14 +23,14 @@ export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
               key={menu}
               type="button"
               onClick={() => setActiveMenu(menu)}
-              className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left text-sm transition-colors ${
+              className={`flex w-full items-start gap-2 rounded-xl border px-2.5 py-2.5 text-left text-sm transition-colors ${
                 isActive
                   ? 'border-blue-200 bg-blue-50 text-blue-700'
                   : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700'
               }`}
             >
               <span
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
                   isActive ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-500'
                 }`}
               >
@@ -66,9 +66,9 @@ export default function Sidebar({ activeMenu, setActiveMenu }: SidebarProps) {
                 )}
               </span>
 
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{menu}</p>
-                <p className="mt-0.5 text-[11px] leading-4 text-slate-400">
+                <p className="mt-1 whitespace-normal break-keep text-[11px] leading-4 text-slate-400">
                   {menu === '테스트셋 생성' ? '업로드 · 생성 · 검토' : '제출 · 실행 · 결과'}
                 </p>
               </div>
