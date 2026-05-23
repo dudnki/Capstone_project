@@ -210,6 +210,9 @@ def submit_student_answers(
             }
             if feedback:
                 row_data["feedback"] = feedback
+            score_reasons = report.get("score_reasons")
+            if score_reasons:
+                row_data["score_reasons"] = score_reasons
 
             results.append(row_data)
 

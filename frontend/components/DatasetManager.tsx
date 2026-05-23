@@ -280,21 +280,33 @@ export default function DatasetManager({
                       <p className="mt-2 text-sm text-slate-500">{formatFileSize(uploadedFile.size)}</p>
                     </div>
 
-                    <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[272px]">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
-                      >
-                        문서 변경
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onRemoveFile}
-                        className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
-                      >
-                        제거
-                      </button>
+                    <div className={isGenerating ? 'flex justify-start xl:justify-end' : 'grid gap-2 sm:grid-cols-2 xl:min-w-[272px]'}>
+                      {isGenerating ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex h-10 items-center rounded-full border border-blue-100 bg-blue-50 px-4 text-sm font-semibold text-blue-600 shadow-sm"
+                        >
+                          생성 중...
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
+                          >
+                            문서 변경
+                          </button>
+                          <button
+                            type="button"
+                            onClick={onRemoveFile}
+                            className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
+                          >
+                            제거
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -383,20 +395,24 @@ export default function DatasetManager({
                   ? '생성된 문제는 아래에서 수정하거나 삭제할 수 있습니다.'
                   : '생성된 질문은 아래에서 바로 수정하거나 삭제할 수 있습니다.'}
               </p>
-              {(isGenerating || generatedSummary) && (
+              {isGenerating && (
                 <div className="mt-4 max-w-xl rounded-xl border border-blue-100 bg-blue-50/60 p-3">
                   <div className="flex items-center justify-between gap-3 text-xs font-semibold text-blue-700">
-                    <span>{isGenerating ? '생성 진행 중' : '생성 완료'}</span>
-                    <span>
-                      {isGenerating ? generationProgress : 100}% · {generationElapsedSeconds}초
-                    </span>
+                    <span>생성 진행 중</span>
+                    <span>{generationProgress}% · {generationElapsedSeconds}초</span>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">
                     <div
                       className="h-full rounded-full bg-blue-600 transition-all duration-500"
-                      style={{ width: `${isGenerating ? generationProgress : 100}%` }}
+                      style={{ width: `${generationProgress}%` }}
                     />
                   </div>
+                </div>
+              )}
+              {!isGenerating && generatedSummary && (
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  생성 완료 · {generationElapsedSeconds}초 소요
                 </div>
               )}
             </div>
