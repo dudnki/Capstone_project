@@ -1,12 +1,13 @@
 ﻿'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import DatasetManager from '../components/DatasetManager';
 import EvaluationResult from '../components/EvaluationResult';
 import type {
   EvalMode,
+  GenerationLevel,
   MenuType,
   QuestionItem,
   GeneratedSummary,
@@ -16,14 +17,118 @@ import type {
 } from '../src/types';
 
 const BASE_URL = 'http://localhost:8001';
-const DOCUMENT_EXTENSIONS = ['.pdf', '.xlsx'];
-const RESULT_EXTENSIONS = ['.csv', '.xlsx'];
+const DOCUMENT_EXTENSIONS = ['.pdf'];
+const RESULT_EXTENSIONS = ['.csv'];
+
+const getEstimatedProgress = (elapsedSeconds: number) => {
+  if (elapsedSeconds <= 10) return Math.min(25, 5 + elapsedSeconds * 2);
+  if (elapsedSeconds <= 60) return Math.min(60, 25 + Math.floor((elapsedSeconds - 10) * 0.7));
+  if (elapsedSeconds <= 180) return Math.min(84, 60 + Math.floor((elapsedSeconds - 60) * 0.2));
+  return Math.min(92, 84 + Math.floor((elapsedSeconds - 180) * 0.03));
+};
+
+const escapeCsvCell = (value: string | number) => {
+  return `"${String(value).replace(/"/g, '""')}"`;
+};
+
+type ParsedCsvRow = Record<string, string>;
+
+const normalizeCsvHeader = (value: string) => value.replace(/^\uFEFF/, '').trim().toLowerCase();
+
+const parseCsvLine = (line: string) => {
+  const cells: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+
+    if (char === '"' && inQuotes && nextChar === '"') {
+      current += '"';
+      i += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+};
+
+const parseCsvText = (csvText: string): ParsedCsvRow[] => {
+  const lines = csvText
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) return [];
+
+  const headers = parseCsvLine(lines[0]).map((header) => header.trim());
+
+  return lines.slice(1).map((line) => {
+    const cells = parseCsvLine(line);
+    return headers.reduce<ParsedCsvRow>((acc, header, index) => {
+      acc[header] = cells[index] ?? '';
+      return acc;
+    }, {});
+  });
+};
+
+const findCsvHeader = (headers: string[], candidates: string[]) => {
+  return headers.find((header) => candidates.includes(normalizeCsvHeader(header)));
+};
+
+const validateResultCsvAnswers = async (file: File) => {
+  const csvText = await file.text();
+  const rows = parseCsvText(csvText);
+
+  if (rows.length === 0) {
+    throw new Error('CSV에 평가할 답변 데이터가 없습니다.');
+  }
+
+  const headers = Object.keys(rows[0] ?? {});
+  const qaIdHeader = findCsvHeader(headers, ['qa_id', 'qaid', 'id']);
+  const answerHeader = findCsvHeader(headers, ['answer', 'user_answer', '답변']);
+
+  if (!qaIdHeader) {
+    throw new Error('qa_id 컬럼이 없습니다. 다운로드한 CSV의 qa_id 값을 유지해 주세요.');
+  }
+
+  if (!answerHeader) {
+    throw new Error('답변 컬럼이 없습니다. answer 또는 답변 컬럼을 포함해 주세요.');
+  }
+
+  const emptyAnswerIndex = rows.findIndex((row) => !row[answerHeader]?.trim());
+
+  if (emptyAnswerIndex >= 0) {
+    throw new Error(`${emptyAnswerIndex + 1}번째 행의 답변이 비어 있습니다. 답변을 입력한 뒤 업로드해 주세요.`);
+  }
+};
 
 export default function RagEvaluationPage() {
   const [evalMode, setEvalMode] = useState<EvalMode | null>(null);
+  const [generationLevel, setGenerationLevel] = useState<GenerationLevel>('medium');
   const [activeMenu, setActiveMenu] = useState<MenuType>('테스트셋 생성');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [generationElapsedSeconds, setGenerationElapsedSeconds] = useState(0);
+  const [evaluationProgress, setEvaluationProgress] = useState(0);
+  const [evaluationElapsedSeconds, setEvaluationElapsedSeconds] = useState(0);
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [resultFile, setResultFile] = useState<File | null>(null);
@@ -44,9 +149,10 @@ export default function RagEvaluationPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultFileInputRef = useRef<HTMLInputElement>(null);
   const mainScrollRef = useRef<HTMLElement | null>(null);
+  const evaluationRunIdRef = useRef(0);
 
-  const canGenerateQuestions = Boolean(uploadedFile);
-  const canRunEvaluation = Boolean(resultFile);
+  const canGenerateQuestions = Boolean(uploadedFile && !generatedSummary);
+  const canRunEvaluation = Boolean(resultFile && !evaluationSummary);
 
   // ─────────────────────────────────────────────────────────
   // 단계 계산
@@ -55,7 +161,6 @@ export default function RagEvaluationPage() {
     if (!uploadedFile) return 1;
     if (!generatedSummary) return 2;
     if (!hasDownloadedQuestionSet) return 3;
-    if (!resultFile) return 4;
     return 5;
   }
 
@@ -68,39 +173,41 @@ export default function RagEvaluationPage() {
     if (activeMenu === '테스트셋 생성') {
       return '기준 문서를 업로드하고 질문 세트를 생성한 뒤 필요한 질문만 검토합니다.';
     }
-    return '사용자 결과 엑셀 파일을 업로드해 답변 품질을 평가합니다.';
+    return '사용자 결과 CSV 파일을 업로드해 답변 품질을 평가합니다.';
   }, [activeMenu]);
 
-  const headerStepLabel = useMemo(() => {
-    if (activeMenu === '테스트셋 생성') {
-      const labels = evalMode === 'user'
-        ? ['1단계 문서 업로드', '2단계 문제 생성', '3단계 문제 검토', '4단계 문제 다운로드']
-        : ['1단계 문서 업로드', '2단계 질문 생성', '3단계 질문 검토', '4단계 질문 다운로드'];
-      return labels[Math.min(currentStepValue, 4) - 1];
-    }
-    return evaluationSummary
-      ? '평가 결과 확인'
-      : (evalMode === 'user' ? '답안지 제출' : '결과 파일 업로드');
-  }, [activeMenu, currentStepValue, evaluationSummary, evalMode]);
+  const modeLabel = evalMode === 'user' ? '학습자 답안 평가' : 'RAG/챗봇 답변 평가';
 
-  const headerPrimaryStatus = useMemo(() => {
-    if (activeMenu === '테스트셋 생성') {
-      return uploadedFile ? `문서 ${uploadedFile.name}` : '문서 미업로드';
-    }
-    return resultFile ? `결과 ${resultFile.name}` : '결과 파일 미업로드';
-  }, [activeMenu, uploadedFile, resultFile]);
+  useEffect(() => {
+    if (!isGenerating) return;
 
-  const headerSecondaryStatus = useMemo(() => {
-    if (activeMenu === '테스트셋 생성') {
-      const unit = evalMode === 'user' ? '문제' : '질문';
-      return generatedSummary ? `${unit} ${generatedSummary.questionCount}개` : `${unit} 생성 전`;
-    }
-    return evaluationSummary
-      ? `질문 ${evaluationSummary.evaluatedCount}개 평가`
-      : generatedSummary
-        ? '질문 세트 준비됨'
-        : '질문 세트 필요';
-  }, [activeMenu, generatedSummary, evaluationSummary]);
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+      setGenerationElapsedSeconds(elapsedSeconds);
+      setGenerationProgress(getEstimatedProgress(elapsedSeconds));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isGenerating]);
+
+  useEffect(() => {
+    if (!isEvaluating) return;
+
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+      setEvaluationElapsedSeconds(elapsedSeconds);
+      setEvaluationProgress(getEstimatedProgress(elapsedSeconds));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isEvaluating]);
+
+  useEffect(() => {
+    if (!mainScrollRef.current) return;
+    mainScrollRef.current.scrollTop = 0;
+  }, [activeMenu]);
 
   // ─────────────────────────────────────────────────────────
   // 유틸
@@ -125,6 +232,8 @@ export default function RagEvaluationPage() {
     setGeneratedSummary(null);
     setGeneratedQuestions([]);
     setHasDownloadedQuestionSet(false);
+    setGenerationProgress(0);
+    setGenerationElapsedSeconds(0);
     // ✅ 문서가 바뀌면 document_id도 초기화
     setCurrentDocumentId(null);
   };
@@ -132,6 +241,8 @@ export default function RagEvaluationPage() {
   const resetEvaluationData = () => {
     setEvaluationSummary(null);
     setEvaluationRows([]);
+    setEvaluationProgress(0);
+    setEvaluationElapsedSeconds(0);
   };
 
   // ─────────────────────────────────────────────────────────
@@ -152,6 +263,8 @@ export default function RagEvaluationPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (validateFile(file, RESULT_EXTENSIONS)) {
+      evaluationRunIdRef.current += 1;
+      setIsEvaluating(false);
       setResultFile(file);
       resetEvaluationData();
     } else if (resultFileInputRef.current) {
@@ -195,6 +308,8 @@ export default function RagEvaluationPage() {
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
     if (validateFile(file, RESULT_EXTENSIONS)) {
+      evaluationRunIdRef.current += 1;
+      setIsEvaluating(false);
       setResultFile(file);
       resetEvaluationData();
     }
@@ -210,8 +325,31 @@ export default function RagEvaluationPage() {
   };
 
   const handleRemoveResultFile = () => {
+    evaluationRunIdRef.current += 1;
+    setIsEvaluating(false);
     setResultFile(null);
     resetEvaluationData();
+    if (resultFileInputRef.current) resultFileInputRef.current.value = '';
+  };
+
+  const handleGoHome = () => {
+    evaluationRunIdRef.current += 1;
+    setEvalMode(null);
+    setGenerationLevel('medium');
+    setActiveMenu('테스트셋 생성');
+    setUploadedFile(null);
+    setResultFile(null);
+    setCurrentDocumentId(null);
+    setGeneratedSummary(null);
+    setGeneratedQuestions([]);
+    setHasDownloadedQuestionSet(false);
+    setEvaluationSummary(null);
+    setEvaluationRows([]);
+    setIsEvaluating(false);
+    setIsDragging(false);
+    setIsDraggingResult(false);
+
+    if (fileInputRef.current) fileInputRef.current.value = '';
     if (resultFileInputRef.current) resultFileInputRef.current.value = '';
   };
 
@@ -219,8 +357,10 @@ export default function RagEvaluationPage() {
   // 질문 생성 (테스트셋 생성 메뉴)
   // ─────────────────────────────────────────────────────────
   const handleGenerateQuestions = async () => {
-  if (!uploadedFile) return;
+  if (!uploadedFile || generatedSummary || isGenerating) return;
 
+  setGenerationProgress(5);
+  setGenerationElapsedSeconds(0);
   setIsGenerating(true);
   try {
     // ── STEP 1. 파일 업로드 ──────────────────────────────
@@ -295,8 +435,10 @@ export default function RagEvaluationPage() {
       createdAt:     new Date().toLocaleString('ko-KR'),
     });
     setHasDownloadedQuestionSet(false);
+    setGenerationProgress(100);
 
   } catch (error) {
+    setGenerationProgress(0);
     console.error('질문 생성 오류:', error);
     alert(error instanceof Error ? error.message : '질문 생성 중 오류가 발생했습니다.');
   } finally {
@@ -312,12 +454,18 @@ export default function RagEvaluationPage() {
     if (generatedQuestions.length === 0) return;
 
     const nowDate = new Date().toISOString().slice(0, 10);
-    const csv = [
-      '번호,qa_id,질문',
+    const csv = `\uFEFF${[
+      '번호,qa_id,질문,답변',
       ...generatedQuestions.map(
-        (q, i) => `"${i + 1}","${q.id}","${q.text.replace(/"/g, '""')}"`
+        (q, index) =>
+          [
+            escapeCsvCell(index + 1),
+            escapeCsvCell(q.id),
+            escapeCsvCell(q.text),
+            escapeCsvCell(''),
+          ].join(',')
       ),
-    ].join('\n');
+    ].join('\n')}`;
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -357,16 +505,19 @@ export default function RagEvaluationPage() {
   //    - payload에 document_id 포함
   // ─────────────────────────────────────────────────────────
   const handleRunEvaluation = async () => {
-    if (!resultFile) return;
+    if (!resultFile || evaluationSummary || isEvaluating) return;
 
-    // document_id가 없으면 경고
-    if (!currentDocumentId) {
-      alert(
-        '평가할 문서 정보가 없습니다.\n먼저 "테스트셋 생성" 메뉴에서 질문을 생성해 주세요.',
-      );
+    try {
+      await validateResultCsvAnswers(resultFile);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'CSV 답변 검증 중 오류가 발생했습니다.');
       return;
     }
 
+    setEvaluationProgress(5);
+    setEvaluationElapsedSeconds(0);
+    const runId = evaluationRunIdRef.current + 1;
+    evaluationRunIdRef.current = runId;
     setIsEvaluating(true);
     try {
       // ── STEP 1. 결과 파일 업로드 ─────────────────────────
@@ -386,6 +537,8 @@ export default function RagEvaluationPage() {
       const uploadData = await uploadRes.json();
       const savedFilename: string = uploadData.saved_filename;
 
+      if (evaluationRunIdRef.current !== runId) return;
+
       // ── STEP 2. 평가 실행 ────────────────────────────────
       // ✅ 엔드포인트: /submit, payload에 document_id 포함
       const evalRes = await fetch(`${BASE_URL}/api/evaluations/submit`, {
@@ -394,7 +547,7 @@ export default function RagEvaluationPage() {
         body: JSON.stringify({
           saved_filename:    savedFilename,
           original_filename: resultFile.name,
-          document_id:       currentDocumentId,
+          document_id:       currentDocumentId ?? '',
           mode:              evalMode === 'user' ? 'human' : 'model',
         }),
       });
@@ -436,6 +589,8 @@ export default function RagEvaluationPage() {
         }>;
       } = await evalRes.json();
 
+      if (evaluationRunIdRef.current !== runId) return;
+
       // ── STEP 4. 프론트 타입으로 변환 ─────────────────────
       const summary: EvaluationSummary = {
         evaluatedCount:    evalData.summary.evaluatedCount,
@@ -463,11 +618,16 @@ export default function RagEvaluationPage() {
 
       setEvaluationSummary(summary);
       setEvaluationRows(rows);
+      setEvaluationProgress(100);
     } catch (error) {
+      if (evaluationRunIdRef.current !== runId) return;
+      setEvaluationProgress(0);
       console.error('평가 오류:', error);
       alert(error instanceof Error ? error.message : '평가 중 오류가 발생했습니다.');
     } finally {
-      setIsEvaluating(false);
+      if (evaluationRunIdRef.current === runId) {
+        setIsEvaluating(false);
+      }
     }
   };
 
@@ -476,8 +636,10 @@ export default function RagEvaluationPage() {
   // ─────────────────────────────────────────────────────────
   const handleActionClick = async () => {
     if (activeMenu === '테스트셋 생성') {
+      if (!canGenerateQuestions || isGenerating) return;
       await handleGenerateQuestions();
     } else {
+      if (!canRunEvaluation || isEvaluating) return;
       await handleRunEvaluation();
     }
   };
@@ -498,38 +660,75 @@ export default function RagEvaluationPage() {
     });
   };
 
+  const handleMenuChange = (menu: MenuType) => {
+    setActiveMenu(menu);
+    requestAnimationFrame(() => {
+      if (mainScrollRef.current) {
+        mainScrollRef.current.scrollTop = 0;
+      }
+    });
+  };
+
   // ─────────────────────────────────────────────────────────
   // 렌더
   // ─────────────────────────────────────────────────────────
 
   if (evalMode === null) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-slate-50 px-6">
-        <div className="text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">RAG Evaluation</p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-900">평가 방식을 선택하세요</h1>
-          <p className="mt-3 text-base text-slate-500">학습자 직접 답변 평가 또는 AI 모델 자동 평가를 선택할 수 있습니다.</p>
-        </div>
-        <div className="grid w-full max-w-2xl gap-5 md:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => setEvalMode('user')}
-            className="flex flex-col gap-3 rounded-2xl border-2 border-blue-200 bg-white p-8 text-left shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all hover:border-blue-400 hover:shadow-[0_12px_40px_rgba(37,99,235,0.15)]"
-          >
-            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-2xl">👤</span>
-            <p className="text-xl font-bold text-slate-900">사용자 평가하기</p>
-            <p className="text-sm leading-6 text-slate-500">학습자가 직접 작성한 답변을 업로드하여 이해도와 내용 완성도를 평가합니다. 채점 근거와 학습 피드백을 제공합니다.</p>
-          </button>
-          <button
-            type="button"
-            onClick={() => setEvalMode('model')}
-            className="flex flex-col gap-3 rounded-2xl border-2 border-slate-200 bg-white p-8 text-left shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all hover:border-slate-400 hover:shadow-[0_12px_40px_rgba(15,23,42,0.12)]"
-          >
-            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl">🤖</span>
-            <p className="text-xl font-bold text-slate-900">모델 평가하기</p>
-            <p className="text-sm leading-6 text-slate-500">AI 챗봇 모델의 답변 품질을 자동으로 평가합니다. 문서 일치도·질문 이해도·내용 완성도를 종합해 점수를 산출합니다.</p>
-          </button>
-        </div>
+      <div className="min-h-screen bg-slate-50 text-slate-900">
+        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6 shadow-[0_1px_4px_rgba(15,23,42,0.04)]">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.16)]">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold tracking-tight text-slate-900">Pipeline Architect</p>
+              <p className="mt-0.5 text-xs text-slate-500">RAG 평가 워크플로우</p>
+            </div>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+            평가 방식 선택
+          </span>
+        </header>
+
+        <main className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-8 px-6 py-10">
+          <div className="text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">RAG Evaluation</p>
+            <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-900">평가 방식을 선택하세요</h1>
+            <p className="mt-3 text-base text-slate-500">학습자 답안 평가 또는 RAG/챗봇 답변 평가를 선택할 수 있습니다.</p>
+          </div>
+          <div className="grid w-full max-w-2xl gap-5 md:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setEvalMode('user')}
+              className="flex flex-col gap-3 rounded-2xl border-2 border-blue-200 bg-white p-8 text-left shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all hover:border-blue-400 hover:shadow-[0_12px_40px_rgba(37,99,235,0.15)]"
+            >
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-2xl">👤</span>
+              <p className="text-xl font-bold text-slate-900">학습자 답안 평가</p>
+              <p className="text-sm leading-6 text-slate-500">학습자가 작성한 답안 CSV를 업로드하여 관련성, 정확도, 유사도를 평가합니다. 채점 근거와 학습 피드백을 제공합니다.</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setEvalMode('model')}
+              className="flex flex-col gap-3 rounded-2xl border-2 border-slate-200 bg-white p-8 text-left shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all hover:border-slate-400 hover:shadow-[0_12px_40px_rgba(15,23,42,0.12)]"
+            >
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl">🤖</span>
+              <p className="text-xl font-bold text-slate-900">RAG/챗봇 답변 평가</p>
+              <p className="text-sm leading-6 text-slate-500">RAG 또는 챗봇이 생성한 답변 CSV를 업로드하여 관련성, 정확도, 유사도를 종합해 점수를 산출합니다.</p>
+            </button>
+          </div>
+        </main>
       </div>
     );
   }
@@ -538,23 +737,25 @@ export default function RagEvaluationPage() {
     <div className="relative flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <Header
         activeMenu={activeMenu}
-        evalMode={evalMode}
         isGenerating={isGenerating}
         isEvaluating={isEvaluating}
         onActionClick={handleActionClick}
+        onHomeClick={handleGoHome}
         isActionDisabled={
           activeMenu === '테스트셋 생성' ? !canGenerateQuestions : !canRunEvaluation
         }
+        isActionComplete={
+          activeMenu === '테스트셋 생성' ? Boolean(generatedSummary) : Boolean(evaluationSummary)
+        }
+        actionProgress={activeMenu === '테스트셋 생성' ? generationProgress : evaluationProgress}
+        modeLabel={modeLabel}
         description={headerDescription}
-        currentStepLabel={headerStepLabel}
-        primaryStatus={headerPrimaryStatus}
-        secondaryStatus={headerSecondaryStatus}
       />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           activeMenu={activeMenu}
-          setActiveMenu={(menu) => setActiveMenu(menu as MenuType)}
+          setActiveMenu={(menu) => handleMenuChange(menu as MenuType)}
         />
 
         <main
@@ -567,12 +768,14 @@ export default function RagEvaluationPage() {
               {activeMenu === '테스트셋 생성' ? (
                 <DatasetManager
                   evalMode={evalMode}
+                  generationLevel={generationLevel}
                   isGenerating={isGenerating}
                   uploadedFile={uploadedFile}
                   generatedSummary={generatedSummary}
                   generatedQuestions={generatedQuestions}
-                  hasDownloadedQuestionSet={hasDownloadedQuestionSet}
                   currentStep={currentStepValue}
+                  generationProgress={generationProgress}
+                  generationElapsedSeconds={generationElapsedSeconds}
                   isDragging={isDragging}
                   fileInputRef={fileInputRef}
                   handleDragOver={handleDragOver}
@@ -580,10 +783,11 @@ export default function RagEvaluationPage() {
                   handleDrop={handleDrop}
                   handleFileChange={handleFileChange}
                   formatFileSize={formatFileSize}
+                  onGenerationLevelChange={setGenerationLevel}
                   onRemoveFile={handleRemoveFile}
                   onGenerateQuestions={handleGenerateQuestions}
                   onDownloadQuestions={handleDownloadQuestions}
-                  onMoveToEvaluation={() => setActiveMenu('성능 평가')}
+                  onMoveToEvaluation={() => handleMenuChange('성능 평가')}
                   onUpdateQuestion={handleUpdateQuestion}
                   onRemoveQuestion={handleRemoveQuestion}
                 />
@@ -592,9 +796,10 @@ export default function RagEvaluationPage() {
                   evalMode={evalMode ?? 'model'}
                   isEvaluating={isEvaluating}
                   resultFile={resultFile}
-                  generatedSummary={generatedSummary}
                   evaluationSummary={evaluationSummary}
                   evaluationRows={evaluationRows}
+                  evaluationProgress={evaluationProgress}
+                  evaluationElapsedSeconds={evaluationElapsedSeconds}
                   resultFileInputRef={resultFileInputRef}
                   isDraggingResult={isDraggingResult}
                   handleResultDragOver={handleResultDragOver}
@@ -602,7 +807,6 @@ export default function RagEvaluationPage() {
                   handleResultDrop={handleResultDrop}
                   handleResultFileChange={handleResultFileChange}
                   onRemoveResultFile={handleRemoveResultFile}
-                  onRunEvaluation={handleRunEvaluation}
                   formatFileSize={formatFileSize}
                   getScrollTop={getMainScrollTop}
                   restoreScrollTop={restoreMainScrollTop}

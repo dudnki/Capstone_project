@@ -1,4 +1,5 @@
 export type EvalMode = 'user' | 'model';
+export type GenerationLevel = 'low' | 'medium' | 'high';
 
 export type MenuType = '테스트셋 생성' | '성능 평가';
 
@@ -9,7 +10,7 @@ export type QuestionItem = {
 
 export type GeneratedSummary = {
   questionCount: number;
-  format: 'csv' | 'xlsx';
+  format: 'csv';
   createdAt: string;
 };
 
