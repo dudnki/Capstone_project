@@ -729,6 +729,29 @@ export default function EvaluationResult({
                       </div>
                     )}
 
+                    {evalMode !== 'user' && (row as any).score_reasons && (
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs font-semibold text-slate-500">질문 이해도 근거</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">
+                            {(row as any).score_reasons.answer_relevancy || '-'}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs font-semibold text-slate-500">내용 완성도 근거</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">
+                            {(row as any).score_reasons.answer_correctness || '-'}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-xs font-semibold text-slate-500">문서 일치도 근거</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">
+                            {(row as any).score_reasons.faithfulness || '-'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     <div>
                       <span
                         className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getScoreStyle(scores.overall)}`}
