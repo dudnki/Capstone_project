@@ -1,5 +1,4 @@
 ﻿import React from 'react';
-
 import type { EvalMode } from '../src/types';
 
 interface HeaderProps {
@@ -36,6 +35,7 @@ export default function Header({
   secondaryStatus,
 }: HeaderProps) {
   const isTestsetMenu = activeMenu === '테스트셋 생성';
+  const isUserMode = evalMode === 'user';
   const isLoading = isTestsetMenu ? isGenerating : isEvaluating;
   const isDisabled = isLoading || isActionDisabled || isActionComplete;
   const resolvedModeLabel =
