@@ -103,6 +103,60 @@ const parseAdviceSteps = (value: unknown) => {
     .filter((item) => item.body.length > 0);
 };
 
+const parseReasonParts = (value: unknown) => {
+  const text = normalizeFeedbackText(value);
+  if (!text) return [];
+
+  return text
+    .split(/\s*\|\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const match = part.match(/^([^:：]{1,16})\s*[:：]\s*(.+)$/);
+
+      if (!match) {
+        return { label: '', body: part };
+      }
+
+      return {
+        label: match[1].trim(),
+        body: match[2].trim(),
+      };
+    });
+};
+
+const renderReasonContent = (value: unknown) => {
+  const parts = parseReasonParts(value);
+
+  if (parts.length === 0) {
+    return <p className="mt-2 text-sm leading-6 text-slate-700">-</p>;
+  }
+
+  if (parts.length === 1 && !parts[0].label) {
+    return <p className="mt-2 text-sm leading-6 text-slate-700">{parts[0].body}</p>;
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      {parts.map((part, index) => (
+        <div
+          key={`${part.label || 'reason'}-${index}`}
+          className="rounded-xl border border-white/70 bg-white/65 px-3 py-2"
+        >
+          {part.label && (
+            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
+              {part.label}
+            </span>
+          )}
+          <p className={part.label ? 'mt-2 text-sm leading-6 text-slate-700' : 'text-sm leading-6 text-slate-700'}>
+            {part.body}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export default function EvaluationResult({
   evalMode,
   isEvaluating,
@@ -166,9 +220,15 @@ export default function EvaluationResult({
     if (statusFilter === 'all') return rowsWithStatus;
     return rowsWithStatus.filter((row) => row._status === statusFilter);
   }, [rowsWithStatus, statusFilter]);
+
+  const hasReasonCards = rowsWithStatus.some(
+    (row) => Boolean(row.score_reasons) || Boolean((row as any).feedback),
+  );
+  const estimatedResultRowHeight =
+    evalMode === 'user' ? 460 : hasReasonCards ? 460 : 260;
   const stableResultListMinHeight = Math.max(
     720,
-    rowsWithStatus.length * (evalMode === 'user' ? 460 : 260),
+    rowsWithStatus.length * estimatedResultRowHeight,
   );
 
   const formatScore = (score: unknown): string => safeNum(score).toFixed(2);
@@ -339,7 +399,9 @@ export default function EvaluationResult({
                 className={`flex min-h-[310px] flex-col items-center justify-center rounded-2xl border border-dashed px-8 transition-colors ${
                   isDraggingResult
                       ? 'border-blue-300 bg-blue-50/70'
-                      : 'border-slate-300 bg-white'
+                      : resultFile
+                        ? 'border-slate-300 bg-white'
+                        : 'border-slate-300 bg-slate-50'
                 }`}
                 onDragOver={handleResultDragOver}
                 onDragLeave={handleResultDragLeave}
@@ -357,21 +419,33 @@ export default function EvaluationResult({
                       </p>
                     </div>
 
-                    <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[272px]">
-                      <button
-                        type="button"
-                        onClick={() => resultFileInputRef.current?.click()}
-                        className="rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
-                      >
-                        CSV 변경
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onRemoveResultFile}
-                        className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
-                      >
-                        제거
-                      </button>
+                    <div className={isEvaluating ? 'flex justify-start xl:justify-end' : 'grid gap-2 sm:grid-cols-2 xl:min-w-[272px]'}>
+                      {isEvaluating ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex h-10 items-center rounded-full border border-blue-100 bg-blue-50 px-4 text-sm font-semibold text-blue-600 shadow-sm"
+                        >
+                          평가 중...
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => resultFileInputRef.current?.click()}
+                            className="rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-200"
+                          >
+                            CSV 변경
+                          </button>
+                          <button
+                            type="button"
+                            onClick={onRemoveResultFile}
+                            className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 shadow-sm transition-colors hover:border-rose-300 hover:bg-rose-100"
+                          >
+                            제거
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -638,6 +712,7 @@ export default function EvaluationResult({
               const scores   = row._scores;
               const status   = row._status;
               const adviceSteps = parseAdviceSteps((row as any).feedback?.advice);
+              const scoreReasons = row.score_reasons;
 
               return (
                 <div key={String(rowKey)} className="px-6 py-5">
@@ -729,25 +804,19 @@ export default function EvaluationResult({
                       </div>
                     )}
 
-                    {evalMode !== 'user' && (row as any).score_reasons && (
+                    {evalMode !== 'user' && scoreReasons && (
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <p className="text-xs font-semibold text-slate-500">질문 이해도 근거</p>
-                          <p className="mt-2 text-sm leading-6 text-slate-700">
-                            {(row as any).score_reasons.answer_relevancy || '-'}
-                          </p>
+                          {renderReasonContent(scoreReasons.answer_relevancy)}
                         </div>
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                          <p className="text-xs font-semibold text-slate-500">내용 완성도 근거</p>
-                          <p className="mt-2 text-sm leading-6 text-slate-700">
-                            {(row as any).score_reasons.answer_correctness || '-'}
-                          </p>
+                        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                          <p className="text-xs font-semibold text-amber-600">내용 완성도 근거</p>
+                          {renderReasonContent(scoreReasons.answer_correctness)}
                         </div>
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                          <p className="text-xs font-semibold text-slate-500">문서 일치도 근거</p>
-                          <p className="mt-2 text-sm leading-6 text-slate-700">
-                            {(row as any).score_reasons.faithfulness || '-'}
-                          </p>
+                        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                          <p className="text-xs font-semibold text-blue-600">문서 일치도 근거</p>
+                          {renderReasonContent(scoreReasons.faithfulness)}
                         </div>
                       </div>
                     )}

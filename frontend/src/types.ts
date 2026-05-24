@@ -44,6 +44,11 @@ export type EvaluationRow = {
     improvements: string;
     advice: string;
   };
+  score_reasons?: {
+    faithfulness?: string;
+    answer_relevancy?: string;
+    answer_correctness?: string;
+  };
 };
 
 export interface EvaluationItem {

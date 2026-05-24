@@ -31,6 +31,17 @@ const escapeCsvCell = (value: string | number) => {
   return `"${String(value).replace(/"/g, '""')}"`;
 };
 
+const getDownloadBaseName = (fileName: string) => {
+  const nameWithoutExtension = fileName.replace(/\.[^/.]+$/, '');
+  const normalized = nameWithoutExtension
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_');
+
+  return normalized || 'rag_questions';
+};
+
 type ParsedCsvRow = Record<string, string>;
 
 const normalizeCsvHeader = (value: string) => value.replace(/^\uFEFF/, '').trim().toLowerCase();
@@ -101,6 +112,7 @@ const validateResultCsvAnswers = async (file: File) => {
   }
 
   const headers = Object.keys(rows[0] ?? {});
+  const numberHeader = findCsvHeader(headers, ['번호', 'no', 'number', 'index']);
   const qaIdHeader = findCsvHeader(headers, ['qa_id', 'qaid', 'id']);
   const answerHeader = findCsvHeader(headers, ['answer', 'user_answer', '답변']);
 
@@ -112,11 +124,18 @@ const validateResultCsvAnswers = async (file: File) => {
     throw new Error('답변 컬럼이 없습니다. answer 또는 답변 컬럼을 포함해 주세요.');
   }
 
-  const emptyAnswerIndex = rows.findIndex((row) => !row[answerHeader]?.trim());
+  const missingAnswerNumbers = rows.reduce<string[]>((acc, row, index) => {
+    const answerValue = row[answerHeader]?.trim();
+    const isMissingAnswer = !answerValue || answerValue.toLowerCase() === 'nan';
 
-  if (emptyAnswerIndex >= 0) {
-    throw new Error(`${emptyAnswerIndex + 1}번째 행의 답변이 비어 있습니다. 답변을 입력한 뒤 업로드해 주세요.`);
-  }
+    if (isMissingAnswer) {
+      acc.push(numberHeader ? row[numberHeader]?.trim() || String(index + 1) : String(index + 1));
+    }
+
+    return acc;
+  }, []);
+
+  return { missingAnswerNumbers };
 };
 
 export default function RagEvaluationPage() {
@@ -219,9 +238,7 @@ export default function RagEvaluationPage() {
   };
 
   const validateFile = (file: File, allowedExtensions: string[]) => {
-    const maxSize = 1024 * 1024 * 1024;
     const fileExt = `.${file.name.split('.').pop()?.toLowerCase()}`;
-    if (file.size > maxSize) return false;
     return allowedExtensions.includes(fileExt);
   };
 
@@ -453,7 +470,7 @@ export default function RagEvaluationPage() {
   const handleDownloadQuestions = () => {
     if (generatedQuestions.length === 0) return;
 
-    const nowDate = new Date().toISOString().slice(0, 10);
+    const baseName = uploadedFile ? getDownloadBaseName(uploadedFile.name) : 'rag_questions';
     const csv = `\uFEFF${[
       '번호,qa_id,질문,답변',
       ...generatedQuestions.map(
@@ -471,7 +488,7 @@ export default function RagEvaluationPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `rag_questions_${nowDate}.csv`;
+    link.download = `${baseName}_questions.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -508,7 +525,16 @@ export default function RagEvaluationPage() {
     if (!resultFile || evaluationSummary || isEvaluating) return;
 
     try {
-      await validateResultCsvAnswers(resultFile);
+      const { missingAnswerNumbers } = await validateResultCsvAnswers(resultFile);
+
+      if (missingAnswerNumbers.length > 0) {
+        const missingQuestionLabel = missingAnswerNumbers.join(', ');
+        const shouldSubmit = window.confirm(
+          `${missingQuestionLabel}번 문항에 답을 적지 않으셨습니다. 정말로 제출하시겠습니까?`,
+        );
+
+        if (!shouldSubmit) return;
+      }
     } catch (error) {
       alert(error instanceof Error ? error.message : 'CSV 답변 검증 중 오류가 발생했습니다.');
       return;
@@ -587,9 +613,9 @@ export default function RagEvaluationPage() {
             advice:       string;
           };
           score_reasons?: {
-            faithfulness:       string;
-            answer_relevancy:   string;
-            answer_correctness: string;
+            faithfulness?:       string;
+            answer_relevancy?:   string;
+            answer_correctness?: string;
           };
         }>;
       } = await evalRes.json();
@@ -743,6 +769,7 @@ export default function RagEvaluationPage() {
     <div className="relative flex min-h-screen flex-col bg-slate-50 text-slate-900">
       <Header
         activeMenu={activeMenu}
+        evalMode={evalMode}
         isGenerating={isGenerating}
         isEvaluating={isEvaluating}
         onActionClick={handleActionClick}

@@ -38,6 +38,8 @@ export default function Header({
   const isUserMode = evalMode === 'user';
   const isLoading = isTestsetMenu ? isGenerating : isEvaluating;
   const isDisabled = isLoading || isActionDisabled || isActionComplete;
+  const resolvedModeLabel =
+    modeLabel ?? (evalMode === 'user' ? '학습자 답안 평가' : evalMode === 'model' ? 'RAG/챗봇 답변 평가' : undefined);
   const buttonLabel = isTestsetMenu ? '질문 생성하기' : '평가 실행하기';
   const loadingLabel = isTestsetMenu ? '질문 생성 중...' : '평가 실행 중...';
   const completeLabel = isTestsetMenu ? '질문 생성 완료' : '평가 완료';
@@ -77,9 +79,9 @@ export default function Header({
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
               {activeMenu}
             </span>
-            {modeLabel && (
+            {resolvedModeLabel && (
               <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                {modeLabel}
+                {resolvedModeLabel}
               </span>
             )}
           </div>
