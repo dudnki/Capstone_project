@@ -225,10 +225,10 @@ export default function EvaluationResult({
     (row) => Boolean(row.score_reasons) || Boolean((row as any).feedback),
   );
   const estimatedResultRowHeight =
-    evalMode === 'user' ? 460 : hasReasonCards ? 460 : 260;
-  const stableResultListMinHeight = Math.max(
-    720,
-    rowsWithStatus.length * estimatedResultRowHeight,
+    evalMode === 'user' ? 380 : hasReasonCards ? 380 : 220;
+  const stableResultListMinHeight = Math.min(
+    640,
+    Math.max(360, rowsWithStatus.length * estimatedResultRowHeight),
   );
 
   const formatScore = (score: unknown): string => safeNum(score).toFixed(2);
@@ -283,26 +283,26 @@ export default function EvaluationResult({
 
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {/* 상단 업로드 섹션 */}
       <section
         className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)] ${
-          hasResults ? '' : 'flex-1 lg:h-[680px] 2xl:h-[700px]'
+          hasResults ? '' : 'min-h-[560px] flex-1 xl:min-h-[620px] 2xl:min-h-[690px]'
         }`}
       >
-        <div className="flex-shrink-0 border-b border-blue-100 bg-blue-50/40 px-6 py-4">
+        <div className="flex-shrink-0 border-b border-blue-100 bg-blue-50/40 px-5 py-4 2xl:px-6">
           <div className="max-w-3xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
               Evaluation
             </p>
-            <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">성능 평가</h2>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 2xl:text-[28px]">성능 평가</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               결과 CSV를 업로드해 답변 품질을 한 화면에서 확인합니다.
             </p>
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col p-5">
+        <div className="flex min-h-0 flex-1 flex-col p-4 2xl:p-5">
           <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex flex-col gap-4">
               <div>
@@ -329,7 +329,7 @@ export default function EvaluationResult({
                   {visibleStep} / {steps.length}
                 </span>
               </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-3">
+              <div className="mt-3 grid gap-2 lg:grid-cols-3">
                 {steps.map((step, index) => (
                   <div
                     key={step}
@@ -394,9 +394,9 @@ export default function EvaluationResult({
               onChange={handleResultFileChange}
             />
 
-            <div className="mt-4 grid flex-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="mt-4 grid flex-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_280px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
               <div
-                className={`flex min-h-[310px] flex-col items-center justify-center rounded-2xl border border-dashed px-8 transition-colors ${
+                className={`flex min-h-[250px] flex-col items-center justify-center rounded-2xl border border-dashed px-5 transition-colors md:min-h-[280px] 2xl:min-h-[310px] 2xl:px-8 ${
                   isDraggingResult
                       ? 'border-blue-300 bg-blue-50/70'
                       : resultFile
@@ -480,7 +480,7 @@ export default function EvaluationResult({
                 )}
               </div>
 
-              <aside className="grid min-h-[310px] min-w-0 grid-rows-2 gap-3">
+              <aside className="grid min-h-[250px] min-w-0 gap-3 sm:grid-cols-2 xl:min-h-[280px] xl:grid-cols-1 2xl:min-h-[310px]">
                 <div className="flex min-h-0 min-w-0 flex-col justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">
                     제출 CSV 형식
@@ -559,26 +559,26 @@ export default function EvaluationResult({
 
       {/* 평가 기준 미리보기 (결과 없을 때) */}
       {!hasResults && (
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-          <div className="min-h-[208px] rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+        <section className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.04)] 2xl:p-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
               평가 기준
             </p>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">평가 기준 미리보기</h3>
-            <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
               {metricPreviewCards.map((item) => (
                 <div
                   key={item.title}
-                  className="min-h-[108px] rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5"
                 >
                   <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">{item.description}</p>
+                  <p className="mt-2 text-sm leading-5 text-slate-500">{item.description}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="min-h-[208px] rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.04)] 2xl:p-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
               제출 형식
             </p>
@@ -586,7 +586,7 @@ export default function EvaluationResult({
             <p className="mt-2 text-sm leading-6 text-slate-500">
               qa_id와 답변이 포함된 CSV를 제출하면 평가에 사용할 수 있습니다.
             </p>
-            <pre className="mt-4 min-h-[72px] overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`번호,qa_id,질문,답변
+            <pre className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] leading-6 text-slate-700">{`번호,qa_id,질문,답변
 1,qa_001,문서의 핵심 목적은 무엇인가요?,사용자 RAG 시스템 답변`}</pre>
           </div>
         </section>
@@ -660,7 +660,7 @@ export default function EvaluationResult({
       {/* 질문별 상세 결과 */}
       {hasResults && (
         <section
-          className="min-h-[760px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]"
+          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)]"
           style={{ minHeight: stableResultListMinHeight + 80, overflowAnchor: 'none' }}
         >
           <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
