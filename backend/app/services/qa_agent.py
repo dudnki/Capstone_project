@@ -49,6 +49,46 @@ SINGLE_BLOOM_TYPES = ["사실 확인", "이해", "적용"]
 MULTI_BLOOM_TYPES = ["분석", "비교"]
 
 
+# 사용자가 프론트에서 선택한 난이도(generationLevel)별 생성 정책.
+# - bloom_priority      : 권장 Bloom 유형 우선순위
+# - lambda_param_hint   : MMR lambda 권장값 (1.0=정보성, 0.0=다양성)
+# - instruction         : 에이전트에게 전달할 한 줄 지시문
+_DIFFICULTY_GUIDE: dict[str, dict] = {
+    "low": {
+        "bloom_priority": ["사실 확인", "이해"],
+        "lambda_param_hint": 0.8,
+        "instruction": (
+            "난이도 '낮음': 단일 청크에서 답할 수 있는 '사실 확인'·'이해' 유형 위주로 생성하라. "
+            "분석/비교 등 멀티청크 결합이 필요한 질문은 만들지 마라(generate_qa_multi 사용 금지). "
+            "select_chunks_mmr는 lambda_param=0.8 권장(정보성 위주)."
+        ),
+    },
+    "medium": {
+        "bloom_priority": ["사실 확인", "이해", "적용", "분석", "비교"],
+        "lambda_param_hint": 0.6,
+        "instruction": (
+            "난이도 '중간': 5개 Bloom 유형이 가능한 한 균등하게 분포되도록 생성하라. "
+            "단일/멀티 청크 질문을 자연스럽게 섞어라. "
+            "select_chunks_mmr는 lambda_param=0.6 권장."
+        ),
+    },
+    "high": {
+        "bloom_priority": ["분석", "비교", "적용"],
+        "lambda_param_hint": 0.4,
+        "instruction": (
+            "난이도 '높음': '분석'·'비교'·'적용' 위주로 생성하라. "
+            "멀티청크 결합 질문(generate_qa_multi)을 목표 개수의 절반 이상으로 포함하라. "
+            "find_related_chunks로 서로 대비되는(different) 청크 짝을 적극 활용하라. "
+            "select_chunks_mmr는 lambda_param=0.4 권장(다양성 위주)."
+        ),
+    },
+}
+
+
+def _difficulty_config(difficulty: str) -> dict:
+    return _DIFFICULTY_GUIDE.get(difficulty, _DIFFICULTY_GUIDE["medium"])
+
+
 # ---------- 상태 ----------
 @dataclass
 class AgentState:
@@ -59,6 +99,7 @@ class AgentState:
     category: str
     rare_tokens: list[str]
     target_n: int
+    difficulty: str = "medium"              # "low" | "medium" | "high"
     valid_embs: np.ndarray | None = None    # lazy
     qa_items: list[QAItem] = field(default_factory=list)
     used_chunk_indices: set[int] = field(default_factory=set)
@@ -203,6 +244,7 @@ TOOLS: list[dict] = [
 # ---------- 도구 구현 ----------
 def tool_inspect_document_stats(state: AgentState) -> dict:
     lens = [len(c) for c in state.valid_chunks]
+    diff_config = _difficulty_config(state.difficulty)
     return {
         "category": state.category,
         "total_chunks_in_doc": len(state.chunks),
@@ -213,10 +255,13 @@ def tool_inspect_document_stats(state: AgentState) -> dict:
         "chunk_length_min": min(lens) if lens else 0,
         "chunk_length_max": max(lens) if lens else 0,
         "target_qa_count": state.target_n,
+        "difficulty": state.difficulty,
+        "bloom_priority": diff_config["bloom_priority"],
+        "lambda_param_hint": diff_config["lambda_param_hint"],
         "available_bloom_types": [name for name, _ in BLOOM_TYPES],
         "guidance": (
-            "사실확인/이해/적용은 generate_qa_single, 분석/비교는 find_related_chunks로 짝 찾고 generate_qa_multi를 사용하라. "
-            "Bloom 유형은 가능한 한 중복 없이 분포시켜라."
+            f"{diff_config['instruction']} "
+            "사실확인/이해/적용은 generate_qa_single, 분석/비교는 find_related_chunks로 짝 찾고 generate_qa_multi를 사용하라."
         ),
     }
 
@@ -448,6 +493,7 @@ def run_qa_agent(
     category: str,
     rare_tokens: list[str],
     target_n: int = 3,
+    difficulty: str = "medium",
     max_iterations: int = 25,
 ) -> list[QAItem]:
     """
@@ -458,6 +504,8 @@ def run_qa_agent(
         category: classify_document 결과
         rare_tokens: extract_rare_tokens 결과
         target_n: 목표 Q&A 개수
+        difficulty: 사용자가 선택한 난이도 ("low"|"medium"|"high"). Bloom 유형 분포와
+                    멀티청크 사용 비율을 결정한다.
         max_iterations: 도구 호출 라운드 상한
     """
     if _openai_client is None:
@@ -474,14 +522,17 @@ def run_qa_agent(
         category=category,
         rare_tokens=rare_tokens,
         target_n=target_n,
+        difficulty=difficulty,
     )
 
+    diff_config = _difficulty_config(difficulty)
     messages: list[Any] = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
-                f"이 문서에서 Q&A {target_n}개를 생성하라. "
+                f"이 문서에서 Q&A {target_n}개를 생성하라.\n"
+                f"{diff_config['instruction']}\n"
                 f"먼저 inspect_document_stats를 호출하여 문서를 파악한 뒤 계획을 세워라."
             ),
         },

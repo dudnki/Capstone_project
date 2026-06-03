@@ -53,6 +53,7 @@ class AgenticPipelineRequest(BaseModel):
     saved_filename: str
     original_filename: str
     target_n: int = 3
+    difficulty: str = "medium"  # "low" | "medium" | "high"
 
 
 def _read_local_file(saved_filename: str) -> bytes:
@@ -292,6 +293,7 @@ async def run_pipeline_agentic(
             category=category,
             rare_tokens=rare_tokens,
             target_n=req.target_n,
+            difficulty=req.difficulty,
         )
         print(f"[Agentic] 에이전트 생성 결과: {len(qa_items)}개 Q&A")
 

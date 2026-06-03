@@ -36,7 +36,29 @@ from app.services.qa_critic import (
 _OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 _openai_client = OpenAI(api_key=_OPENAI_API_KEY)
 _instructor_client = instructor.from_openai(_openai_client)
-_MODEL = "gpt-4o-mini"
+_MODEL = "gpt-4o"
+
+# Multi-chunk는 단일청크보다 통과 난이도가 구조적으로 높다
+# (bloom_alignment·groundedness가 두 청크 결합 시 더 까다로움).
+# 평균 임계값은 유지하고 차원별 최저점만 완화하여 false negative를 줄인다.
+MULTI_MIN_PER_DIM: float = 2.5
+
+
+# Single/Multi 양쪽 system 프롬프트에 공통 주입되는 질문 품질 가드.
+# Why: mini 모델 시절 'X와 Y의 차이는?' 같은 유형 예시 골격 그대로 출력, 복합 질문,
+#      청크 용어 paraphrase(예: '분위수'를 '양자화'로) 같은 품질 사고가 다수 발생했음.
+_QUESTION_QUALITY_GUARDS = (
+    "[질문 품질 가드 — 반드시 준수]\n"
+    "• 1문장 1요점: 한 질문에 두 가지를 동시에 묻지 마라. "
+    "'그리고', '또한', '또', '~며' 등으로 두 요점을 묶는 복합 질문 금지.\n"
+    "• 표면적 골격 금지: 'X와 Y의 차이는?', 'X의 정의는?'처럼 유형 설명의 예시 골격을 "
+    "그대로 베끼지 마라. 비교/분석은 **비교/분석의 측면을 반드시 명시**하라 "
+    "(예: '메커니즘 측면', '성능 측면', '적용 조건 측면').\n"
+    "• 청크 용어 보존: 청크에 등장하는 한국어 용어/영문 약어/고유명사를 임의로 paraphrase "
+    "하거나 풀어쓰거나 번역하지 마라. (예: '분위수'를 '양자화'로 바꾸지 말 것. "
+    "'L2O'를 'L2O(Optimization)'처럼 괄호로 풀지 말 것.)\n"
+    "• 답이 한 가지로 정해지는 질문만 작성하라. open-ended 토론/주관식 의견 질문 금지."
+)
 
 
 # Bloom Taxonomy 기반 질문 유형
@@ -100,9 +122,17 @@ def _filter_tokens_for_chunk(rare_tokens: list[str], chunk: str) -> list[str]:
     return [t for t in rare_tokens if t.lower() in chunk_lower]
 
 
+# Citation 매칭용 — PDF 추출 노이즈 흡수 (공백/구두점/따옴표/대시 변형 무시)
+# Why: LLM이 청크 문장을 "그대로 인용"해도 PDF 추출 과정의 미세한 구두점/공백 차이로
+#      매칭에 실패해 후보가 통째로 탈락하는 사례가 잦음. 특히 multi-chunk에서 빈도 높음.
+_MATCH_STRIP_PATTERN = re.compile(
+    r"[\s\.,;:!?\-‐-―−\(\)\[\]\{\}\"'‘’“”·]+"
+)
+
+
 def _normalize_for_match(s: str) -> str:
-    """공백 무시 + 소문자 — citation 부분 매칭용."""
-    return re.sub(r"\s+", "", s).lower()
+    """공백·구두점·따옴표·대시 변형 무시 + 소문자. citation 부분 매칭용."""
+    return _MATCH_STRIP_PATTERN.sub("", s).lower()
 
 
 # ---------- 출력 스키마 ----------
@@ -198,7 +228,8 @@ def _build_prompt(
         "[답변 정확성]\n"
         "• 답변에 들어가는 모든 사실/수치/예시는 **청크에 명시적으로 존재**해야 한다. "
         "청크에 없는 예시·인용·수치를 임의로 만들어 넣지 마라 (특히 영문 참고문헌 등).\n"
-        "• 근거 문장은 answer_quote에 청크 원문 그대로 인용한다."
+        "• 근거 문장은 answer_quote에 청크 원문 그대로 인용한다.\n"
+        f"{_QUESTION_QUALITY_GUARDS}"
     )
 
     user_prompt = (
@@ -455,7 +486,12 @@ _MULTI_SYSTEM_MSG = (
     "• 다른 언어(중국어/일본어/태국어 등) 절대 사용 금지.\n"
     "[답변 정확성]\n"
     "• 답변의 모든 사실/수치/예시는 청크에 명시적으로 존재해야 함. "
-    "청크에 없는 예시·인용을 만들어 넣지 마라."
+    "청크에 없는 예시·인용을 만들어 넣지 마라.\n"
+    "[멀티청크 결합 규칙]\n"
+    "• 질문은 반드시 **여러 청크의 정보를 모두 활용**해야 답할 수 있어야 한다. "
+    "단일 청크로 답 가능한 질문은 만들지 마라.\n"
+    "• 답변은 3~5문장으로 각 청크의 핵심 사실/수치/명칭을 명시적으로 포함하라.\n"
+    f"{_QUESTION_QUALITY_GUARDS}"
 )
 
 
@@ -499,9 +535,9 @@ def generate_qa_multi_chunk(
     category: str,
     rare_tokens: list[str],
     bloom_type: str,
-    n_candidates: int = 3,
+    n_candidates: int = 5,
     top_k: int = 1,
-    max_outer_retries: int = 2,
+    max_outer_retries: int = 3,
     use_geval: bool = True,
 ) -> list[QAResult]:
     """
@@ -590,7 +626,10 @@ def generate_qa_multi_chunk(
             refine_feedback = "Critic 호출 모두 실패. 질문/답변을 더 명확한 한국어로 작성하라."
             continue
 
-        passing = [(c, s) for c, s in scored_this_round if is_qa_passing(s)]
+        passing = [
+            (c, s) for c, s in scored_this_round
+            if is_qa_passing(s, min_per_dim=MULTI_MIN_PER_DIM)
+        ]
         if len(passing) >= top_k:
             passing.sort(key=lambda x: x[1].weighted_score, reverse=True)
             selected = [c for c, _ in passing[:top_k]]
