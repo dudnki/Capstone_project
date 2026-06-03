@@ -155,23 +155,23 @@ export default function DatasetManager({
       ];
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <section
         className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)] ${
-          hasQuestions ? '' : 'flex-1 lg:h-[680px] 2xl:h-[700px]'
+          hasQuestions ? '' : 'min-h-[560px] flex-1 xl:min-h-[620px] 2xl:min-h-[690px]'
         }`}
       >
-        <div className="flex-shrink-0 border-b border-blue-100 bg-blue-50/40 px-6 py-4">
+        <div className="flex-shrink-0 border-b border-blue-100 bg-blue-50/40 px-5 py-4 2xl:px-6">
           <div className="max-w-3xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">Testset Builder</p>
-            <h2 className="mt-2 text-[28px] font-bold tracking-tight text-slate-900">테스트셋 생성</h2>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 2xl:text-[28px]">테스트셋 생성</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               기준 문서를 업로드하고 질문을 생성한 뒤, 같은 화면에서 바로 검토하고 내려받습니다.
             </p>
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col p-5">
+        <div className="flex min-h-0 flex-1 flex-col p-4 2xl:p-5">
           <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex flex-col gap-4">
               <div>
@@ -194,7 +194,7 @@ export default function DatasetManager({
                   {visibleStep} / 4
                 </span>
               </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-4">
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
                 {STEPS.map((step, index) => (
                   <div
                     key={step}
@@ -259,9 +259,9 @@ export default function DatasetManager({
               onChange={handleFileChange}
             />
 
-            <div className="mt-4 grid flex-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="mt-4 grid flex-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_280px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
               <div
-                className={`flex min-h-[310px] flex-col items-center justify-center rounded-2xl border border-dashed px-8 transition-colors ${
+                className={`flex min-h-[250px] flex-col items-center justify-center rounded-2xl border border-dashed px-5 transition-colors md:min-h-[280px] 2xl:min-h-[310px] 2xl:px-8 ${
                   isDragging
                     ? 'border-blue-300 bg-blue-50/70'
                     : uploadedFile
@@ -341,7 +341,7 @@ export default function DatasetManager({
                 )}
               </div>
 
-              <aside className="grid min-h-[310px] min-w-0 grid-rows-2 gap-3">
+              <aside className="grid min-h-[250px] min-w-0 gap-3 sm:grid-cols-2 xl:min-h-[280px] xl:grid-cols-1 2xl:min-h-[310px]">
                 <div className="flex min-h-0 min-w-0 flex-col justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">
                     보조 설정
@@ -443,33 +443,33 @@ export default function DatasetManager({
       </section>
 
       {!hasQuestions && (
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-          <div className="min-h-[208px] rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+        <section className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.04)] 2xl:p-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">How it works</p>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">테스트셋 생성 흐름</h3>
-            <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
               {emptyGuideSteps.map((item) => (
                 <div
                   key={item.step}
-                  className="relative min-h-[108px] rounded-2xl border border-slate-200 bg-slate-50 p-4 pr-16"
+                  className="relative rounded-2xl border border-slate-200 bg-slate-50 p-3.5 pr-14"
                 >
-                  <span className="absolute right-4 top-4 text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">
+                  <span className="absolute right-3.5 top-3.5 text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">
                     STEP {item.step}
                   </span>
                   <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">{item.description}</p>
+                  <p className="mt-2 text-sm leading-5 text-slate-500">{item.description}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="min-h-[208px] rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.04)] 2xl:p-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">다운로드 형식</p>
             <h3 className="mt-2 text-lg font-semibold text-slate-900">답변 작성용 CSV 예시</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               내려받은 파일에서 qa_id와 질문은 유지하고, 답변 컬럼만 채워 제출합니다.
             </p>
-            <pre className="mt-4 min-h-[72px] overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-[11px] leading-6 text-slate-700">{`번호,qa_id,질문,답변
+            <pre className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] leading-6 text-slate-700">{`번호,qa_id,질문,답변
 1,qa_001,문서의 핵심 목적은 무엇인가요?,`}</pre>
           </div>
         </section>

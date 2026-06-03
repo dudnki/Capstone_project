@@ -404,6 +404,7 @@ export default function RagEvaluationPage() {
       body: JSON.stringify({
         saved_filename: savedFilename,
         original_filename: uploadedFile.name,
+        generation_level: generationLevel,
       }),
     });
 
