@@ -26,8 +26,6 @@ interface EvaluationResultProps {
   restoreScrollTop: (top: number) => void;
 }
 
-const RESULT_EXTENSIONS = ['CSV'];
-
 const safeNum = (v: unknown): number => {
   const n = Number(v);
   return isNaN(n) || v == null ? 0 : n;
@@ -185,7 +183,7 @@ export default function EvaluationResult({
   const visibleStep = Math.min(stepProgress, steps.length);
 
   const csvUploadIcon = (
-    <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_rgba(37,99,235,0.08)]">
+    <div className="upload-bounce mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-600 shadow-[0_10px_24px_rgba(37,99,235,0.08)]">
       <svg
         width="26"
         height="26"
@@ -286,11 +284,9 @@ export default function EvaluationResult({
     <div className="flex h-full min-h-0 flex-col gap-4">
       {/* 상단 업로드 섹션 */}
       <section
-        className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.04)] ${
-          hasResults ? '' : 'min-h-[560px] flex-1 xl:min-h-[620px] 2xl:min-h-[690px]'
-        }`}
+        className={`flex flex-col gap-4 ${hasResults ? '' : 'flex-1'}`}
       >
-        <div className="flex-shrink-0 border-b border-blue-100 bg-blue-50/40 px-5 py-4 2xl:px-6">
+        <div className="flex-shrink-0 px-1 py-2">
           <div className="max-w-3xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
               Evaluation
@@ -302,9 +298,9 @@ export default function EvaluationResult({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col p-4 2xl:p-5">
-          <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex flex-col gap-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <div className="flex flex-1 flex-col gap-4">
+            <div className="sr-only">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-xl font-semibold text-slate-900">
@@ -322,23 +318,23 @@ export default function EvaluationResult({
               </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-blue-100 bg-white px-4 py-3 shadow-[0_8px_20px_rgba(37,99,235,0.04)]">
+            <div className="relative">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">진행 단계</p>
-                <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
+                <p className="sr-only">진행 단계</p>
+                <span className="absolute right-3 top-3 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
                   {visibleStep} / {steps.length}
                 </span>
               </div>
-              <div className="mt-3 grid gap-2 lg:grid-cols-3">
+              <div className="grid gap-2 p-2 lg:grid-cols-3">
                 {steps.map((step, index) => (
                   <div
                     key={step}
-                    className={`rounded-xl border px-3 py-2.5 ${
+                    className={`rounded-xl border px-4 py-4 ${
                       index + 1 < stepProgress
-                        ? 'border-emerald-100 bg-emerald-50/70'
+                        ? 'border-emerald-100 bg-emerald-50/60'
                         : index + 1 === stepProgress
-                          ? 'border-blue-300 bg-blue-50/70 shadow-[0_8px_20px_rgba(37,99,235,0.10)]'
-                          : 'border-slate-200 bg-slate-50'
+                          ? 'border-blue-300 bg-blue-50/70'
+                          : 'border-slate-200 bg-white'
                     }`}
                   >
                     <div className="flex items-center gap-2">
@@ -394,14 +390,23 @@ export default function EvaluationResult({
               onChange={handleResultFileChange}
             />
 
-            <div className="mt-4 grid flex-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_280px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="mt-2 grid flex-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_280px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-4">
+                  <h3 className="text-xl font-semibold text-slate-900">
+                    {evalMode === 'user' ? '답안지 CSV 제출' : '결과 CSV 업로드'}
+                  </h3>
+                  <span className="ml-1 text-xs font-semibold tracking-[0.08em] text-slate-500">
+                    qa_id / 답변
+                  </span>
+                </div>
               <div
-                className={`flex min-h-[250px] flex-col items-center justify-center rounded-2xl border border-dashed px-5 transition-colors md:min-h-[280px] 2xl:min-h-[310px] 2xl:px-8 ${
+                className={`m-4 flex min-h-[390px] flex-1 flex-col items-center justify-center rounded-xl border border-dashed px-5 py-7 transition-colors md:min-h-[420px] 2xl:min-h-[470px] 2xl:px-8 ${
                   isDraggingResult
                       ? 'border-blue-300 bg-blue-50/70'
                       : resultFile
                         ? 'border-slate-300 bg-white'
-                        : 'border-slate-300 bg-slate-50'
+                        : 'border-slate-300 bg-white'
                 }`}
                 onDragOver={handleResultDragOver}
                 onDragLeave={handleResultDragLeave}
@@ -466,18 +471,9 @@ export default function EvaluationResult({
                     >
                       CSV 선택
                     </button>
-                    <div className="mt-5 flex flex-wrap justify-center gap-2">
-                      {RESULT_EXTENSIONS.map((ext) => (
-                        <span
-                          key={ext}
-                          className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500"
-                        >
-                          {ext}
-                        </span>
-                      ))}
-                    </div>
                   </div>
                 )}
+              </div>
               </div>
 
               <aside className="grid min-h-[250px] min-w-0 gap-3 sm:grid-cols-2 xl:min-h-[280px] xl:grid-cols-1 2xl:min-h-[310px]">
@@ -485,38 +481,42 @@ export default function EvaluationResult({
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">
                     제출 CSV 형식
                   </p>
-                  <p className="mt-3 text-sm font-semibold text-slate-900">필수 컬럼</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                      qa_id
-                    </span>
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                      답변
-                    </span>
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3.5">
+                    <p className="text-sm font-semibold text-slate-900">필수 컬럼</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full border border-blue-100 bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 shadow-sm">
+                        qa_id
+                      </span>
+                      <span className="rounded-full border border-blue-100 bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 shadow-sm">
+                        답변
+                      </span>
+                    </div>
+                    <p className="mt-3 text-xs leading-5 text-slate-500">
+                      qa_id는 그대로 유지하고, 답변만 입력합니다.
+                    </p>
                   </div>
-                  <p className="mt-3 text-xs leading-5 text-slate-500">
-                    qa_id는 그대로 유지하고, 답변만 입력합니다.
-                  </p>
                 </div>
 
                 <div className="flex min-h-0 min-w-0 flex-col justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">
                     업로드 전 확인
                   </p>
-                  <ul className="mt-3 space-y-2 text-xs leading-5 text-slate-600">
-                    <li className="flex gap-2">
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                      <span>CSV 파일만 업로드할 수 있습니다.</span>
-                    </li>
-                    <li className="flex gap-2">
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                      <span>qa_id는 다운로드한 값 그대로 유지합니다.</span>
-                    </li>
-                    <li className="flex gap-2">
-                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                      <span>답변 컬럼에는 평가할 답변만 입력합니다.</span>
-                    </li>
-                  </ul>
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                    <ul className="space-y-2 text-xs leading-5 text-slate-600">
+                      <li className="flex gap-2">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                        <span>CSV 파일만 업로드할 수 있습니다.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                        <span>qa_id는 다운로드한 값 그대로 유지합니다.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                        <span>답변 컬럼에는 평가할 답변만 입력합니다.</span>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </aside>
             </div>
@@ -560,16 +560,16 @@ export default function EvaluationResult({
       {/* 평가 기준 미리보기 (결과 없을 때) */}
       {!hasResults && (
         <section className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_8px_30px_rgba(15,23,42,0.04)] 2xl:p-5">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)] 2xl:p-6">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
               평가 기준
             </p>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">평가 기준 미리보기</h3>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+            <h3 className="mt-2 text-xl font-semibold text-slate-900">평가 기준 미리보기</h3>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
               {metricPreviewCards.map((item) => (
                 <div
                   key={item.title}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5"
+                  className="min-h-[104px] rounded-2xl border border-slate-200 bg-slate-50 p-4"
                 >
                   <p className="text-sm font-semibold text-slate-900">{item.title}</p>
                   <p className="mt-2 text-sm leading-5 text-slate-500">{item.description}</p>

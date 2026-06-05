@@ -11,11 +11,30 @@
 @keyframes toastIn  { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
 @keyframes shimmer  { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
 @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-9px); } }
+@keyframes uploadBounce {
+  0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 10px 24px rgba(37,99,235,0.10); }
+  42% { transform: translateY(-6px) scale(1.035); box-shadow: 0 14px 28px rgba(37,99,235,0.16); }
+  68% { transform: translateY(1px) scale(0.99); box-shadow: 0 9px 20px rgba(37,99,235,0.12); }
+}
+@keyframes uploadIconPop {
+  0%, 100% { transform: translateY(0); }
+  42% { transform: translateY(-1.5px); }
+  68% { transform: translateY(0.5px); }
+}
 
 .pulse-dot  { animation: pulseGlow 1.6s ease infinite; }
 .modal-anim { animation: modalIn  0.24s cubic-bezier(.34,1.56,.64,1) both; }
 .toast-anim { animation: toastIn  0.3s ease both; }
 .float      { animation: float 3.4s ease-in-out infinite; }
+.upload-bounce {
+  animation: uploadBounce 1.8s ease-in-out infinite !important;
+  transform-origin: center;
+  will-change: transform, box-shadow;
+}
+.upload-bounce svg {
+  animation: uploadIconPop 1.8s ease-in-out infinite !important;
+  transform-origin: center;
+}
 
 /* ── Hover 효과 모음 ── */
 .metric-card { transition: transform 0.18s, box-shadow 0.18s; }

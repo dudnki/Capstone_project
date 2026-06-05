@@ -708,7 +708,7 @@ export default function RagEvaluationPage() {
 
   if (evalMode === null) {
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="min-h-screen bg-[#eef2f7] text-slate-900">
         <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6 shadow-[0_1px_4px_rgba(15,23,42,0.04)]">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.16)]">
@@ -735,31 +735,155 @@ export default function RagEvaluationPage() {
           </span>
         </header>
 
-        <main className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-8 px-6 py-10">
-          <div className="text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">RAG Evaluation</p>
-            <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-900">평가 방식을 선택하세요</h1>
-            <p className="mt-3 text-base text-slate-500">학습자 답안 평가 또는 RAG/챗봇 답변 평가를 선택할 수 있습니다.</p>
-          </div>
-          <div className="grid w-full max-w-2xl gap-5 md:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setEvalMode('user')}
-              className="flex flex-col gap-3 rounded-2xl border-2 border-blue-200 bg-white p-8 text-left shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all hover:border-blue-400 hover:shadow-[0_12px_40px_rgba(37,99,235,0.15)]"
-            >
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-2xl">👤</span>
-              <p className="text-xl font-bold text-slate-900">학습자 답안 평가</p>
-              <p className="text-sm leading-6 text-slate-500">학습자가 작성한 답안 CSV를 업로드하여 관련성, 정확도, 유사도를 평가합니다. 채점 근거와 학습 피드백을 제공합니다.</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => setEvalMode('model')}
-              className="flex flex-col gap-3 rounded-2xl border-2 border-slate-200 bg-white p-8 text-left shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all hover:border-slate-400 hover:shadow-[0_12px_40px_rgba(15,23,42,0.12)]"
-            >
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl">🤖</span>
-              <p className="text-xl font-bold text-slate-900">RAG/챗봇 답변 평가</p>
-              <p className="text-sm leading-6 text-slate-500">RAG 또는 챗봇이 생성한 답변 CSV를 업로드하여 관련성, 정확도, 유사도를 종합해 점수를 산출합니다.</p>
-            </button>
+        <main className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-6 py-10">
+          <div className="grid w-full max-w-[1040px] gap-5 lg:grid-cols-[0.96fr_1.04fr]">
+            <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-600">
+                RAG Evaluation
+              </p>
+              <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+                평가 워크스페이스 시작
+              </h1>
+              <p className="mt-4 text-sm leading-7 text-slate-600">
+                기준 문서를 테스트셋으로 만들고, 제출된 답변 CSV를 같은 흐름 안에서
+                평가합니다. 먼저 평가 대상을 선택하면 필요한 업로드 형식과 진행 단계가
+                정리됩니다.
+              </p>
+
+              <div className="mt-8 space-y-3">
+                {[
+                  ['01', '기준 문서 업로드', 'PDF 기반 질문 세트를 생성합니다.'],
+                  ['02', '답변 CSV 제출', 'qa_id와 답변을 기준으로 평가합니다.'],
+                  ['03', '결과 확인', '종합 점수와 세부 근거를 확인합니다.'],
+                ].map(([step, title, description]) => (
+                  <div
+                    key={step}
+                    className="flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-sm font-bold text-blue-700">
+                      {step}
+                    </span>
+                    <span>
+                      <span className="block text-sm font-bold text-slate-950">{title}</span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-500">{description}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-600">
+                Mode Select
+              </p>
+              <h2 className="mt-4 text-3xl font-bold tracking-tight text-slate-950">
+                평가 방식을 선택하세요
+              </h2>
+
+              <div className="mt-8 space-y-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEvalMode('user');
+                    setActiveMenu('테스트셋 생성');
+                  }}
+                  className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-[0_16px_38px_rgba(37,99,235,0.14)]"
+                >
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+                    <svg
+                      width="22"
+                      height="22"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M20 21a8 8 0 0 0-16 0" />
+                      <circle cx="12" cy="8" r="4" />
+                    </svg>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="text-lg font-bold text-slate-950">학습자 답안 평가</span>
+                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
+                        채점 피드백
+                      </span>
+                    </span>
+                    <span className="mt-2 block text-sm leading-6 text-slate-600">
+                      학습자가 작성한 답안 CSV를 업로드해 점수, 채점 근거, 개선 방향을 확인합니다.
+                    </span>
+                  </span>
+                  <svg
+                    className="shrink-0 text-slate-400 transition-colors group-hover:text-blue-700"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M5 12h14" />
+                    <path d="m13 6 6 6-6 6" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEvalMode('model');
+                    setActiveMenu('테스트셋 생성');
+                  }}
+                  className="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-[0_16px_38px_rgba(16,185,129,0.14)]"
+                >
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 transition-colors group-hover:bg-emerald-50 group-hover:text-emerald-700">
+                    <svg
+                      width="22"
+                      height="22"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M4 19.5V5a2 2 0 0 1 2-2h11l3 3v13.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5Z" />
+                      <path d="M17 3v4h4" />
+                      <path d="M8 13h8" />
+                      <path d="M8 17h5" />
+                    </svg>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="text-lg font-bold text-slate-950">RAG/챗봇 답변 평가</span>
+                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 transition-colors group-hover:bg-emerald-50 group-hover:text-emerald-700">
+                        모델 결과
+                      </span>
+                    </span>
+                    <span className="mt-2 block text-sm leading-6 text-slate-600">
+                      RAG 또는 챗봇이 생성한 답변 CSV를 업로드해 관련성, 정확도, 유사도를 산출합니다.
+                    </span>
+                  </span>
+                  <svg
+                    className="shrink-0 text-slate-400 transition-colors group-hover:text-emerald-700"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M5 12h14" />
+                    <path d="m13 6 6 6-6 6" />
+                  </svg>
+                </button>
+              </div>
+            </section>
           </div>
         </main>
       </div>
