@@ -864,7 +864,7 @@ export default function RagEvaluationPage() {
                       </span>
                     </span>
                     <span className="mt-2 block text-sm leading-6 text-slate-600">
-                      RAG 또는 챗봇이 생성한 답변 CSV를 업로드해 질문 이해도, 내용 완성도, 문서 일치도를 산출합니다.
+                      RAG 또는 챗봇이 생성한 답변 CSV를 업로드해 관련성, 정확도, 유사도를 산출합니다.
                     </span>
                   </span>
                   <svg

@@ -260,22 +260,42 @@ export default function EvaluationResult({
   const overallFeedback = (evaluationSummary as any)?.overallFeedback;
   const overallDirectionSteps = parseAdviceSteps(overallFeedback?.direction);
 
+  const metricCopy = evalMode === 'user'
+    ? {
+        combined: '질문 이해도, 내용 완성도, 문서 일치도',
+        relevancy: '질문 이해도',
+        correctness: '내용 완성도',
+        faithfulness: '문서 일치도',
+        relevancyDescription: '질문이 무엇을 묻는지 파악하고 맞게 답변했는지 평가',
+        correctnessDescription: '핵심 내용을 빠짐없이 포함했는지 평가',
+        faithfulnessDescription: '제공된 자료를 벗어나지 않고 정확히 활용했는지 평가',
+      }
+    : {
+        combined: '관련성, 정확도, 유사도',
+        relevancy: '관련성',
+        correctness: '정확도',
+        faithfulness: '유사도',
+        relevancyDescription: '답변이 질문 의도와 얼마나 관련 있는지 평가',
+        correctnessDescription: '답변 내용이 기준 문서와 비교해 정확한지 평가',
+        faithfulnessDescription: '답변이 기준 문서 기반 기대 답변과 얼마나 유사한지 평가',
+      };
+
   const metricPreviewCards = [
     {
       title: '종합',
-      description: '질문 이해도, 내용 완성도, 문서 일치도를 종합해 전체 답변 품질을 확인합니다.',
+      description: `${metricCopy.combined}를 종합해 전체 답변 품질을 확인합니다.`,
     },
     {
-      title: '질문 이해도',
-      description: '답변이 질문 의도에 맞게 작성되었는지 확인합니다.',
+      title: metricCopy.relevancy,
+      description: metricCopy.relevancyDescription,
     },
     {
-      title: '내용 완성도',
-      description: '답변 내용이 충분하고 일관성 있는지 확인합니다.',
+      title: metricCopy.correctness,
+      description: metricCopy.correctnessDescription,
     },
     {
-      title: '문서 일치도',
-      description: '답변이 기준 문서와 얼마나 일치하는지 확인합니다.',
+      title: metricCopy.faithfulness,
+      description: metricCopy.faithfulnessDescription,
     },
   ];
 
@@ -530,7 +550,7 @@ export default function EvaluationResult({
                   : '결과 파일을 업로드하면 상단에서 평가를 실행할 수 있습니다'}
               </p>
               <p className="mt-1 text-sm leading-6 text-slate-500">
-                qa_id와 답변을 기준으로 질문 이해도, 내용 완성도, 문서 일치도를 함께 확인합니다.
+                qa_id와 답변을 기준으로 {metricCopy.combined}를 함께 확인합니다.
               </p>
               {isEvaluating && (
                 <div className="mt-4 max-w-xl rounded-xl border border-blue-100 bg-blue-50/60 p-3">
@@ -604,27 +624,27 @@ export default function EvaluationResult({
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">질문 이해도</p>
+            <p className="text-xs text-slate-500">{metricCopy.relevancy}</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.relevancy)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변이 질문 의도와 얼마나 관련 있는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">{metricCopy.relevancyDescription}</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">내용 완성도</p>
+            <p className="text-xs text-slate-500">{metricCopy.correctness}</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.correctness)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변 내용이 기준 문서와 비교해 충분하고 일관성 있는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">{metricCopy.correctnessDescription}</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_8px_30px_rgba(15,23,42,0.04)]">
-            <p className="text-xs text-slate-500">문서 일치도</p>
+            <p className="text-xs text-slate-500">{metricCopy.faithfulness}</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
               {formatScore(summaryScores.faithfulness)}
             </p>
-            <p className="mt-2 text-xs text-slate-500">답변이 기준 문서 기반 기대 답변과 얼마나 일치하는지 평가</p>
+            <p className="mt-2 text-xs text-slate-500">{metricCopy.faithfulnessDescription}</p>
           </div>
         </section>
       )}
@@ -744,19 +764,19 @@ export default function EvaluationResult({
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">질문 이해도</p>
+                          <p className="text-[11px] text-slate-500">{metricCopy.relevancy}</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.relevancy)}
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">내용 완성도</p>
+                          <p className="text-[11px] text-slate-500">{metricCopy.correctness}</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.correctness)}
                           </p>
                         </div>
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] text-slate-500">문서 일치도</p>
+                          <p className="text-[11px] text-slate-500">{metricCopy.faithfulness}</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">
                             {formatScore(scores.faithfulness)}
                           </p>
@@ -807,15 +827,15 @@ export default function EvaluationResult({
                     {evalMode !== 'user' && scoreReasons && (
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                          <p className="text-xs font-semibold text-slate-500">질문 이해도 근거</p>
+                          <p className="text-xs font-semibold text-slate-500">{metricCopy.relevancy} 근거</p>
                           {renderReasonContent(scoreReasons.answer_relevancy)}
                         </div>
                         <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
-                          <p className="text-xs font-semibold text-amber-600">내용 완성도 근거</p>
+                          <p className="text-xs font-semibold text-amber-600">{metricCopy.correctness} 근거</p>
                           {renderReasonContent(scoreReasons.answer_correctness)}
                         </div>
                         <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-                          <p className="text-xs font-semibold text-blue-600">문서 일치도 근거</p>
+                          <p className="text-xs font-semibold text-blue-600">{metricCopy.faithfulness} 근거</p>
                           {renderReasonContent(scoreReasons.faithfulness)}
                         </div>
                       </div>
